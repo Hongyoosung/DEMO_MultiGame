@@ -6,6 +6,9 @@
 #include "GameFramework/GameModeBase.h"
 #include "DEMO_MultiGameGameMode.generated.h"
 
+class FInputProcessor;
+class FRunnableThread;
+
 UCLASS(minimalapi)
 class ADEMO_MultiGameGameMode : public AGameModeBase
 {
@@ -13,6 +16,13 @@ class ADEMO_MultiGameGameMode : public AGameModeBase
 
 public:
 	ADEMO_MultiGameGameMode();
+
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+private:
+	FInputProcessor* InputProcessor;
+	FRunnableThread* InputProcessorThread;
 };
 
 
