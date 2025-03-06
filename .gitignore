@@ -1,0 +1,47 @@
+# Unreal Engine 생성 파일
+/Saved/
+/Intermediate/
+/DerivedDataCache/
+/Build/
+
+# 컴파일된 소스 파일
+*.obj
+*.exe
+*.pdb
+*.user
+*.aps
+*.pch
+*.vspscc
+*_i.c
+*_p.c
+*.ncb
+*.suo
+*.tlb
+*.tlh
+*.bak
+*.cache
+*.ilk
+*.log
+*.lib
+*.sbr
+
+# 언리얼 엔진 특정 파일
+*.uasset
+*.umap
+/Content/StarterContent/
+/Content/Characters/
+/Content/FirstPerson/
+/Content/ThirdPerson/
+/Content/TopDown/
+
+# Visual Studio 파일
+.vs/
+*.sln
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+
+# 기타
+Binaries/
