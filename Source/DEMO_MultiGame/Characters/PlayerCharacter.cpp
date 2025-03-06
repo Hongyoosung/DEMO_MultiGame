@@ -2,17 +2,13 @@
 
 
 #include "PlayerCharacter.h"
-#include "PlayerCharacter.h"
+#include "DEMO_MultiGame.h"
 #include "Net/UnrealNetwork.h"
 #include "Blueprint/UserWidget.h"
 #include "Widgets/HealthBarWidget.h"
-#include "Tasks/TAttackTask.h"
 #include "AntiCheat/AntiCheatManager.h"
 #include "Modules/ModuleManager.h"
-
-
-DEFINE_LOG_CATEGORY(PlayerCharacter);
-IMPLEMENT_PRIMARY_GAME_MODULE(FDefaultGameModuleImpl, PlayerCharacter, "PlayerCharacter");
+#include "GameModes/MultiGameMode.h"
 
 
 APlayerCharacter::APlayerCharacter() : Health(100.0f)
@@ -147,16 +143,25 @@ void APlayerCharacter::Server_Attack_Implementation()
 {
 	// 체크섬 검사
 	bool bIsValidChecksum = UAntiCheatManager::GetInstance()->VerifyHealthChecksum(this);
-	
+    
 	if (bIsValidChecksum == false)
 	{
-		TESTLOG(Warning, TEXT("Health checksum verification failed. Possible memory tampering detected."));
 		return;
 	}
 
+	// 스레드풀에 공격 태스크 등록
+	AMultiGameMode* GameMode = Cast<AMultiGameMode>(GetWorld()->GetAuthGameMode());
+	if (GameMode)
+	{
+		GameMode->ExecuteAttackTask(this);
+	}
+	else
+	{
+		TESTLOG(Warning, TEXT("Failed to GameMode"));
+	}
 	
 	// 비동기 형식으로 작업 생성 및 자동 삭제
-	(new FAutoDeleteAsyncTask<FTAttackTask>(this))->StartBackgroundTask();
+	//(new FAutoDeleteAsyncTask<FTAttackTask>(this))->StartBackgroundTask();
 	
 	// 동기 형식
 	/*

@@ -1,71 +1,101 @@
 ﻿#pragma once
+#include "DEMO_MultiGame.h"
 #include "Characters/PlayerCharacter.h"
 #include "Async/AsyncWork.h"
 #include "AntiCheat/AntiCheatManager.h"
-#include "DEMO_MultiGameGameMode.h"
 
-class FTAttackTask : public FNonAbandonableTask
+
+class FTAttackTask : public IQueuedWork
 {
 public:
-	APlayerCharacter* Player;
+	FTAttackTask() : Player(nullptr) {}
 
-	FTAttackTask(APlayerCharacter* InPlayer) : Player(InPlayer){}
+	void Initialize(APlayerCharacter* InPlayer)
+	{
+		Player = InPlayer;
+	}
 
-	void DoWork() const
+	void SetCompletionCallback(TFunction<void(FTAttackTask*)> InCallback)
+	{
+		CompletionCallback = MoveTemp(InCallback);
+	}
+
+	virtual void DoThreadedWork() override
 	{
 		if (Player == nullptr)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Player is nullptr!"));
+			TESTLOG(Warning, TEXT("Player is nullptr!"));
 		}
-		
-		// 공격 로직 실행
-		UE_LOG(LogTemp, Log, TEXT("Attack executed by %s"), *Player->GetName());
 
-		// 실제 공격 로직
-		// 충돌 검사 및 데미지 처리
+		TESTLOG(Warning, TEXT("Attack eecuted by %s "), *Player->GetName());
+
+		// 게임 스레드에서 실행해야 하는 작업
 		AsyncTask(ENamedThreads::GameThread, [this]()
 		{
-			TArray<FHitResult> HitResults;
-			FCollisionQueryParams Params;
-			Params.AddIgnoredActor(Player); // Player를 무시
+			PerformAttackLogic();
+		});
 
-			const FVector Start = Player->GetActorLocation();
-			const FVector End = Start;
-
-			const bool bHit = Player->GetWorld()->SweepMultiByChannel(
-			HitResults,
-				Start,
-				End,
-				FQuat::Identity,
-				ECC_Pawn,
-				FCollisionShape::MakeSphere(300.0f),
-				Params);
-
-			if (bHit)
+		// 작업 완료 후 콜백 실행
+		if (CompletionCallback)
+		{
+			AsyncTask(ENamedThreads::GameThread, [this]()
 			{
-				for (auto& Hit : HitResults)
+				CompletionCallback(this);
+			});
+		}
+	}
+
+	virtual void Abandon() override {};
+
+private:
+	void PerformAttackLogic() const
+	{
+		if (Player == nullptr || Player->IsValidLowLevel() == false)
+		{
+			TESTLOG(Warning, TEXT("Player is nullptr!"));
+			return;
+		}
+		
+		TArray<FHitResult> HitResults;
+		FCollisionQueryParams Params;
+		Params.AddIgnoredActor(Player);
+
+		const FVector Start = Player->GetActorLocation();
+		const FVector End = Start;
+		constexpr float Distance = 300.0f;
+
+		const bool bHit = Player->GetWorld()->SweepMultiByChannel(
+			HitResults,
+			Start,
+			End,
+			FQuat::Identity,
+			ECC_Pawn,
+			FCollisionShape::MakeSphere(Distance),
+			Params);
+
+		if (bHit == false)
+		{
+			TESTLOG(Warning, TEXT("HitResult is null!"));
+			return;
+		}
+		
+		for (auto& Hit : HitResults)
+		{
+			APlayerCharacter* OtherCharacter = Cast<APlayerCharacter>(Hit.GetActor());
+
+			if (OtherCharacter && OtherCharacter != Player)
+			{
+				if (UAntiCheatManager::GetInstance()->VerifyAttackRange(Player, OtherCharacter, Distance))
 				{
-					APlayerCharacter* OtherCharacter = Cast<APlayerCharacter>(Hit.GetActor());
-
-					if (OtherCharacter && OtherCharacter != Player)
-					{
-						constexpr float Distance = 300.0f;
-
-						// 공격 범위 검증
-						if (UAntiCheatManager::GetInstance()->VerifyAttackRange(Player, OtherCharacter, Distance))
-						{
-							OtherCharacter->TakeDamage(10.0f);
-						}
-						else
-						{
-							return;
-						}
-					}
+					OtherCharacter->TakeDamage(10.0f);
 				}
 			}
-		});
+		}
+
+		
 	}
 	
-
-	FORCEINLINE TStatId GetStatId() const { return TStatId(); }
+private:
+	APlayerCharacter* Player;
+	TFunction<void(FTAttackTask*)> CompletionCallback;
 };
