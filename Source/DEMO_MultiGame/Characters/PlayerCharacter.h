@@ -23,6 +23,10 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	// Spawn Hit Effect
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_SpawnHitEffect(const FVector Location);
+	
 	UFUNCTION()
 	void TakeDamage(float Damage);
 

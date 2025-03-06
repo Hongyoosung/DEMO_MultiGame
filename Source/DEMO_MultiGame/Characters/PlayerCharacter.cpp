@@ -26,6 +26,14 @@ void APlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(APlayerCharacter, Health);
 }
 
+void APlayerCharacter::Multicast_SpawnHitEffect_Implementation(const FVector Location)
+{
+	if (HitEffect)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), HitEffect, Location);
+	}
+}
+
 void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -104,7 +112,7 @@ void APlayerCharacter::TakeDamage(const float Damage)
 		
 		if (GetHealth() < 0) SetHealth(0.0f);
 
-		UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), HitEffect, GetActorLocation());
+		Multicast_SpawnHitEffect(GetActorLocation());
 	}
 }
 
