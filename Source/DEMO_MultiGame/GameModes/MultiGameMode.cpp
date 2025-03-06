@@ -1,5 +1,4 @@
-﻿#include "C:\Users\Foryoucom\Documents\Unreal Projects\DEMO_MultiGame\Intermediate\Build\Win64\x64\DEMO_MultiGameEditor\Development\UnrealEd\SharedPCH.UnrealEd.Project.ValApi.Cpp20.h"
-#include "MultiGameMode.h"
+﻿#include "MultiGameMode.h"
 #include "DEMO_MultiGamePlayerController.h"
 #include "DEMO_MultiGameCharacter.h"
 #include "UObject/ConstructorHelpers.h"
