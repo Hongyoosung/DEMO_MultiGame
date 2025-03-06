@@ -7,6 +7,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Widgets/HealthBarWidget.h"
 #include "Tasks/TAttackTask.h"
+#include "AntiCheat/AntiCheatManager.h"
 
 
 APlayerCharacter::APlayerCharacter() : Health(100.0f)
@@ -18,13 +19,27 @@ APlayerCharacter::APlayerCharacter() : Health(100.0f)
 	HealthBarWidgetComponent->SetDrawSize(FVector2D(200.0f, 50.0f));
 	HealthBarWidgetComponent->SetNetAddressable();
 	HealthBarWidgetComponent->SetIsReplicated(true);
+
+	UAntiCheatManager::GetInstance()->UpdateHealthChecksum(this);
 }
+
+
+void APlayerCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+	
+	InitializeHealthWidget();
+	
+	UAntiCheatManager::GetInstance()->UpdateHealthChecksum(this);
+}
+
 
 void APlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(APlayerCharacter, Health);
 }
+
 
 void APlayerCharacter::Multicast_SpawnHitEffect_Implementation(const FVector Location)
 {
@@ -34,12 +49,6 @@ void APlayerCharacter::Multicast_SpawnHitEffect_Implementation(const FVector Loc
 	}
 }
 
-void APlayerCharacter::BeginPlay()
-{
-	Super::BeginPlay();
-	
-	InitializeHealthWidget();
-}
 
 void APlayerCharacter::InitializeHealthWidget()
 {
@@ -68,6 +77,7 @@ void APlayerCharacter::InitializeHealthWidget()
 	}
 }
 
+
 void APlayerCharacter::UpdateHealthUI() const
 {
 	if (HealthBarWidget)
@@ -80,11 +90,6 @@ void APlayerCharacter::UpdateHealthUI() const
 	}
 }
 
-void APlayerCharacter::Tick(float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
-
-}
 
 void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
@@ -92,9 +97,10 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 	PlayerInputComponent->BindAction("Attack", IE_Pressed, this, &APlayerCharacter::Client_Attack);
 }
 
+
 void APlayerCharacter::Client_Attack()
 {
-	if (HasAuthority())
+	if (HasAuthority() == true)
 	{
 		Server_Attack();
 	}
@@ -104,22 +110,26 @@ void APlayerCharacter::Client_Attack()
 	}
 }
 
+
 void APlayerCharacter::TakeDamage(const float Damage)
 {
-	if (HasAuthority())
+	if (HasAuthority() == true)
 	{
-		SetHealth(Health - Damage);
-		
-		if (GetHealth() < 0) SetHealth(0.0f);
+		if (GetHealth() - Damage< 0)
+		{
+			SetHealth(0);
+		}
+		else
+		{
+			SetHealth(GetHealth() - Damage);
+		}
 
+		// Health 값 체크섬 업데이트
+		UAntiCheatManager::GetInstance()->UpdateHealthChecksum(this);
+
+		// 각 클라이언트가 이펙트를 표출하게 함
 		Multicast_SpawnHitEffect(GetActorLocation());
 	}
-}
-
-void APlayerCharacter::OnRep_Health() const
-{
-	// Health 값 변경 시 UI 업데이트 처리
-	UpdateHealthUI();
 }
 
 
@@ -130,6 +140,16 @@ bool APlayerCharacter::Server_Attack_Validate()
 
 void APlayerCharacter::Server_Attack_Implementation()
 {
+	// 체크섬 검사
+	bool bIsValidChecksum = UAntiCheatManager::GetInstance()->VerifyHealthChecksum(this);
+	
+	if (bIsValidChecksum == false)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Health checksum verification failed. Possible memory tampering detected."));
+		return;
+	}
+
+	
 	// 비동기 형식으로 작업 생성 및 자동 삭제
 	(new FAutoDeleteAsyncTask<FTAttackTask>(this))->StartBackgroundTask();
 	
@@ -145,3 +165,9 @@ void APlayerCharacter::Server_Attack_Implementation()
 	*/
 }
 
+
+void APlayerCharacter::OnRep_Health() const
+{
+	// Health 값 변경 시 UI 업데이트 처리
+	UpdateHealthUI();
+}

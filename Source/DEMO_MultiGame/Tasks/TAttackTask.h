@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "Characters/PlayerCharacter.h"
 #include "Async/AsyncWork.h"
+#include "AntiCheat/AntiCheatManager.h"
 #include "DEMO_MultiGameGameMode.h"
 
 class FTAttackTask : public FNonAbandonableTask
@@ -12,56 +13,59 @@ public:
 
 	void DoWork() const
 	{
-		if (Player)
+		if (Player == nullptr)
 		{
-			// 공격 로직 실행
-			UE_LOG(LogTemp, Log, TEXT("Attack executed by %s"), *Player->GetName());
+			UE_LOG(LogTemp, Warning, TEXT("Player is nullptr!"));
+		}
+		
+		// 공격 로직 실행
+		UE_LOG(LogTemp, Log, TEXT("Attack executed by %s"), *Player->GetName());
 
-			// 실제 공격 로직
-			// 충돌 검사 및 데미지 처리
-			AsyncTask(ENamedThreads::GameThread, [this]()
+		// 실제 공격 로직
+		// 충돌 검사 및 데미지 처리
+		AsyncTask(ENamedThreads::GameThread, [this]()
+		{
+			TArray<FHitResult> HitResults;
+			FCollisionQueryParams Params;
+			Params.AddIgnoredActor(Player); // Player를 무시
+
+			const FVector Start = Player->GetActorLocation();
+			const FVector End = Start;
+
+			const bool bHit = Player->GetWorld()->SweepMultiByChannel(
+			HitResults,
+				Start,
+				End,
+				FQuat::Identity,
+				ECC_Pawn,
+				FCollisionShape::MakeSphere(300.0f),
+				Params);
+
+			if (bHit)
 			{
-				TArray<FHitResult> HitResults;
-				FCollisionQueryParams Params;
-				Params.AddIgnoredActor(Player); // Player를 무시
-
-				const FVector Start = Player->GetActorLocation();
-				const FVector End = Start;
-
-				const bool bHit = Player->GetWorld()->SweepMultiByChannel(
-					HitResults,
-					Start,
-					End,
-					FQuat::Identity,
-					ECC_Pawn,
-					FCollisionShape::MakeSphere(300.0f),
-					Params
-				);
-
-				if (bHit)
+				for (auto& Hit : HitResults)
 				{
-					for (auto& Hit : HitResults)
-					{
-						APlayerCharacter* OtherCharacter = Cast<APlayerCharacter>(Hit.GetActor());
+					APlayerCharacter* OtherCharacter = Cast<APlayerCharacter>(Hit.GetActor());
 
-						if (OtherCharacter && OtherCharacter != Player)
+					if (OtherCharacter && OtherCharacter != Player)
+					{
+						constexpr float Distance = 300.0f;
+
+						// 공격 범위 검증
+						if (UAntiCheatManager::GetInstance()->VerifyAttackRange(Player, OtherCharacter, Distance))
 						{
-							// AntiCheat: 공격 범위와 위치를 서버에서 확인하여 옳은 공격인지 검증
-							const float Distance = FVector::Dist(Player->GetActorLocation(), OtherCharacter->GetActorLocation());
-							if (Distance > 300.0f)
-							{
-								UE_LOG(LogTemp, Warning, TEXT("Attack target is too far: %f units"), Distance);
-							}
-							else
-							{
-								OtherCharacter->TakeDamage(10.0f);
-							}
+							OtherCharacter->TakeDamage(10.0f);
+						}
+						else
+						{
+							return;
 						}
 					}
 				}
-			});
-		}
+			}
+		});
 	}
+	
 
 	FORCEINLINE TStatId GetStatId() const { return TStatId(); }
 };
