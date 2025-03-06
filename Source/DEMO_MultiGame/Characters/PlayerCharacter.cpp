@@ -2,15 +2,22 @@
 
 
 #include "PlayerCharacter.h"
+#include "PlayerCharacter.h"
 #include "Net/UnrealNetwork.h"
 #include "Blueprint/UserWidget.h"
-#include "Components/ProgressBar.h"
-#include "Kismet/GameplayStatics.h"
+#include "Widgets/HealthBarWidget.h"
+#include "Tasks/TAttackTask.h"
 
 
 APlayerCharacter::APlayerCharacter() : Health(100.0f)
 {
-	
+	HealthBarWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("HealthBar"));
+	HealthBarWidgetComponent->SetupAttachment(GetMesh());
+	HealthBarWidgetComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 200.0f));
+	HealthBarWidgetComponent->SetWidgetSpace(EWidgetSpace::Screen); 
+	HealthBarWidgetComponent->SetDrawSize(FVector2D(200.0f, 50.0f));
+	HealthBarWidgetComponent->SetNetAddressable();
+	HealthBarWidgetComponent->SetIsReplicated(true);
 }
 
 void APlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -22,14 +29,46 @@ void APlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	
+	InitializeHealthWidget();
+}
 
-	if (HealthWidgetClass && IsLocallyControlled())
+void APlayerCharacter::InitializeHealthWidget()
+{
+	if (HealthBarWidgetComponent)
 	{
-		HealthWidget = CreateWidget<UUserWidget>(GetWorld(), HealthWidgetClass);
-		if (HealthWidget)
+		// 위젯 생성 및 초기화
+		if (HealthWidgetClass)
 		{
-			HealthWidget->AddToViewport();
+			HealthBarWidgetComponent->SetWidgetClass(HealthWidgetClass);
+			HealthBarWidget = Cast<UHealthBarWidget>(HealthBarWidgetComponent->GetUserWidgetObject());
+			
+			if (HealthBarWidget)
+			{
+				// 체력 UI 초기화
+				UpdateHealthUI();
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("Failed to create HealthBarWidget"));
+			}
 		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("HealthWidgetClass not set"));
+		}
+	}
+}
+
+void APlayerCharacter::UpdateHealthUI() const
+{
+	if (HealthBarWidget)
+	{
+		// 체력 퍼센트 업데이트
+		HealthBarWidget->UpdateHealthBar(GetHealth() / 100.0f);
+		
+		// 체력바 색상 업데이트 (자신의 캐릭터인지 여부에 따라)
+		HealthBarWidget->UpdateHealthBarColor(IsLocallyControlled());
 	}
 }
 
@@ -37,14 +76,6 @@ void APlayerCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (HealthWidget)
-	{
-		HealthBar = Cast<UProgressBar>(HealthWidget->GetWidgetFromName("HealthBar"));
-		if (HealthBar)
-		{
-			HealthBar->SetPercent(Health / 100.0f);
-		}
-	}
 }
 
 void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -65,39 +96,38 @@ void APlayerCharacter::Client_Attack()
 	}
 }
 
-void APlayerCharacter::TakeDamage(float Damage)
+void APlayerCharacter::TakeDamage(const float Damage)
 {
 	if (HasAuthority())
 	{
-		Health -= Damage;
-		if (Health < 0) Health = 0;
+		SetHealth(Health - Damage);
+		
+		if (GetHealth() < 0) SetHealth(0.0f);
 
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), HitEffect, GetActorLocation());
 	}
 }
 
+void APlayerCharacter::OnRep_Health() const
+{
+	// Health 값 변경 시 UI 업데이트 처리
+	UpdateHealthUI();
+}
+
+
+bool APlayerCharacter::Server_Attack_Validate()
+{
+	return true;
+}
+
 void APlayerCharacter::Server_Attack_Implementation()
 {
-	TArray<FHitResult> HitResults;
-	FCollisionQueryParams Params;
-	Params.AddIgnoredActor(this);
+	// FAsyncTask로 비동기 작업 생성
+	FAsyncTask<TAttackTask>* Task = new FAsyncTask<TAttackTask>(this);
+	Task->StartBackgroundTask();
 
-	FVector Start = GetActorLocation();
-	FVector End = Start;
-
-	bool bHit = GetWorld()->SweepMultiByChannel(HitResults, Start, End, FQuat::Identity, ECC_Pawn, FCollisionShape::MakeSphere(300.0f), Params);
-
-	if (bHit)
-	{
-		for (auto& Hit : HitResults)
-		{
-			APlayerCharacter* OtherCharacter = Cast<APlayerCharacter>(Hit.GetActor());
-			
-			if (OtherCharacter && OtherCharacter != this)
-			{
-				OtherCharacter->TakeDamage(10.0f);
-			}
-		}
-	}
+	// 작업 완료 후 삭제
+	Task->EnsureCompletion(); // 동기적으로 완료 대기 (실제로는 비동기 처리 필요)
+	delete Task;
 }
 

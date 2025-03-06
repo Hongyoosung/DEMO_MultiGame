@@ -20,9 +20,9 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
+	FQueuedThreadPool* GetThreadPool() const { return ThreadPool; }; 
 private:
-	FInputProcessor* InputProcessor;
-	FRunnableThread* InputProcessorThread;
+	FQueuedThreadPool* ThreadPool;
 };
 
 

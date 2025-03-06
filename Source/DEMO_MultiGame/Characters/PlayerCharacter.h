@@ -5,9 +5,10 @@
 #include "CoreMinimal.h"
 #include "DEMO_MultiGameCharacter.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Components/WidgetComponent.h"
 #include "PlayerCharacter.generated.h"
 
-class UProgressBar;
+class UHealthBarWidget;
 /**
  * 
  */
@@ -22,6 +23,15 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	UFUNCTION()
+	void TakeDamage(float Damage);
+
+	UFUNCTION(Category = "UI")
+	void OnRep_Health() const;
+	
+	void SetHealth(const float NewHealth)		{	Health = NewHealth;	}
+	float GetHealth() const				{	return	 Health;	}
+	
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* InputComponent) override;
@@ -29,28 +39,27 @@ protected:
 private:
 	void Client_Attack();
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, WithValidation)
 	void Server_Attack();
 
-	UFUNCTION()
-	void TakeDamage(float Damage);
-
+	// UI 관련 함수들
+	void InitializeHealthWidget();
+	void UpdateHealthUI() const;
 public:
-	UPROPERTY(Replicated, BlueprintReadOnly)
-	float Health;
-
 	// niagara system
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
 	class UNiagaraSystem* HitEffect;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
+	TSubclassOf<UUserWidget> HealthWidgetClass;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "UI")
+	UWidgetComponent* HealthBarWidgetComponent;
 	
 private:
 	UPROPERTY(EditDefaultsOnly)
-	TSubclassOf<UUserWidget> HealthWidgetClass;
+	UHealthBarWidget* HealthBarWidget;
 
-	UPROPERTY(EditDefaultsOnly)
-	UUserWidget* HealthWidget;
-
-	UPROPERTY(EditDefaultsOnly)
-	UProgressBar* HealthBar;
-	
+	UPROPERTY(ReplicatedUsing = OnRep_Health)
+	float Health;
 };
