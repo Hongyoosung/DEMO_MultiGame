@@ -8,6 +8,11 @@
 #include "Widgets/HealthBarWidget.h"
 #include "Tasks/TAttackTask.h"
 #include "AntiCheat/AntiCheatManager.h"
+#include "Modules/ModuleManager.h"
+
+
+DEFINE_LOG_CATEGORY(PlayerCharacter);
+IMPLEMENT_PRIMARY_GAME_MODULE(FDefaultGameModuleImpl, PlayerCharacter, "PlayerCharacter");
 
 
 APlayerCharacter::APlayerCharacter() : Health(100.0f)
@@ -67,12 +72,12 @@ void APlayerCharacter::InitializeHealthWidget()
 			}
 			else
 			{
-				UE_LOG(LogTemp, Error, TEXT("Failed to create HealthBarWidget"));
+				TESTLOG(Warning, TEXT("Failed to create HealthBarWidget"));
 			}
 		}
 		else
 		{
-			UE_LOG(LogTemp, Error, TEXT("HealthWidgetClass not set"));
+			TESTLOG(Error, TEXT("HealthWidgetClass not set"));
 		}
 	}
 }
@@ -145,7 +150,7 @@ void APlayerCharacter::Server_Attack_Implementation()
 	
 	if (bIsValidChecksum == false)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Health checksum verification failed. Possible memory tampering detected."));
+		TESTLOG(Warning, TEXT("Health checksum verification failed. Possible memory tampering detected."));
 		return;
 	}
 
