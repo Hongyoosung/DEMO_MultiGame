@@ -44,6 +44,7 @@ void APlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 
 void APlayerCharacter::Multicast_SpawnHitEffect_Implementation(const FVector Location)
 {
+	// 피격 플레이어에 이펙트를 나타내는 RPC
 	if (HitEffect)
 	{
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), HitEffect, Location);
