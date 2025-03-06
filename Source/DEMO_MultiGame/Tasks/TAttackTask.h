@@ -3,12 +3,12 @@
 #include "Async/AsyncWork.h"
 #include "DEMO_MultiGameGameMode.h"
 
-class TAttackTask : public FNonAbandonableTask
+class FTAttackTask : public FNonAbandonableTask
 {
 public:
 	APlayerCharacter* Player;
 
-	TAttackTask(APlayerCharacter* InPlayer) : Player(InPlayer){}
+	FTAttackTask(APlayerCharacter* InPlayer) : Player(InPlayer){}
 
 	void DoWork() const
 	{
@@ -25,10 +25,10 @@ public:
 				FCollisionQueryParams Params;
 				Params.AddIgnoredActor(Player); // Player를 무시
 
-				FVector Start = Player->GetActorLocation();
-				FVector End = Start;
+				const FVector Start = Player->GetActorLocation();
+				const FVector End = Start;
 
-				bool bHit = Player->GetWorld()->SweepMultiByChannel(
+				const bool bHit = Player->GetWorld()->SweepMultiByChannel(
 					HitResults,
 					Start,
 					End,
@@ -46,7 +46,16 @@ public:
 
 						if (OtherCharacter && OtherCharacter != Player)
 						{
-							OtherCharacter->TakeDamage(10.0f);
+							// AntiCheat: 공격 범위와 위치를 서버에서 확인하여 옳은 공격인지 검증
+							const float Distance = FVector::Dist(Player->GetActorLocation(), OtherCharacter->GetActorLocation());
+							if (Distance > 300.0f)
+							{
+								UE_LOG(LogTemp, Warning, TEXT("Attack target is too far: %f units"), Distance);
+							}
+							else
+							{
+								OtherCharacter->TakeDamage(10.0f);
+							}
 						}
 					}
 				}

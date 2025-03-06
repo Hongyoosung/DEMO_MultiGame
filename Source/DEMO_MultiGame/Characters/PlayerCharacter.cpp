@@ -130,12 +130,18 @@ bool APlayerCharacter::Server_Attack_Validate()
 
 void APlayerCharacter::Server_Attack_Implementation()
 {
+	// 비동기 형식으로 작업 생성 및 자동 삭제
+	(new FAutoDeleteAsyncTask<FTAttackTask>(this))->StartBackgroundTask();
+	
+	// 동기 형식
+	/*
 	// FAsyncTask로 비동기 작업 생성
-	FAsyncTask<TAttackTask>* Task = new FAsyncTask<TAttackTask>(this);
+	FAsyncTask<FTAttackTask>* Task = new FAsyncTask<FTAttackTask>(this);
 	Task->StartBackgroundTask();
 
 	// 작업 완료 후 삭제
 	Task->EnsureCompletion(); // 동기적으로 완료 대기 (실제로는 비동기 처리 필요)
 	delete Task;
+	*/
 }
 
