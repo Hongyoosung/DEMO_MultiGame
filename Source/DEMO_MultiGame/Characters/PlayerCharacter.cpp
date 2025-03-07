@@ -11,27 +11,158 @@
 #include "GameModes/MultiGameMode.h"
 
 
-APlayerCharacter::APlayerCharacter() : Health(100.0f)
+void FPlayerChecksum::UpdateHealthChecksum(const float Health)
 {
-	HealthBarWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("HealthBar"));
-	HealthBarWidgetComponent->SetupAttachment(GetMesh());
-	HealthBarWidgetComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 200.0f));
-	HealthBarWidgetComponent->SetWidgetSpace(EWidgetSpace::Screen); 
-	HealthBarWidgetComponent->SetDrawSize(FVector2D(200.0f, 50.0f));
-	HealthBarWidgetComponent->SetNetAddressable();
-	HealthBarWidgetComponent->SetIsReplicated(true);
+	HealthChecksum = FCrc::MemCrc32(&Health, sizeof(Health));
+}
 
-	UAntiCheatManager::GetInstance()->UpdateHealthChecksum(this);
+void FPlayerChecksum::UpdatePositionChecksum(const FVector& Position)
+{
+	PositionChecksum = FCrc::MemCrc32(&Position, sizeof(Position));
+}
+
+
+APlayerCharacter::APlayerCharacter()
+	: HitEffect(nullptr), HealthWidgetClass(nullptr)
+	, HealthBarWidgetComponent(nullptr), GameMode(nullptr)
+	, HealthBarWidget(nullptr), Health(100.0f)
+	, AttackRange(300.0f), ChecksumUpdateInterval(1.0f), TimeSinceLastChecksumUpdate(0.0f)
+	
+{
+	
+	// Initialize HealthBarWidgetComponent
+	HealthBarWidgetComponent =		CreateDefaultSubobject<UWidgetComponent>(TEXT("HealthBar"));
+	HealthBarWidgetComponent->		SetupAttachment(GetMesh());
+	HealthBarWidgetComponent->		SetRelativeLocation(FVector(0.0f, 0.0f, 200.0f));
+	HealthBarWidgetComponent->		SetWidgetSpace(EWidgetSpace::Screen); 
+	HealthBarWidgetComponent->		SetDrawSize(FVector2D(200.0f, 50.0f));
+	HealthBarWidgetComponent->		SetNetAddressable();
+	HealthBarWidgetComponent->		SetIsReplicated(true);
+
+	// Initialize checksums
+	UpdateAllChecksums();
 }
 
 
 void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Initialize GameMode
+	GameMode = Cast<AMultiGameMode>(GetWorld()->GetAuthGameMode());
+	if (!GameMode)
+	{
+		TESTLOG(Warning, TEXT("Failed to get GameMode"));
+	}
 	
 	InitializeHealthWidget();
 	
-	UAntiCheatManager::GetInstance()->UpdateHealthChecksum(this);
+	// Initialize checksums
+	UpdateAllChecksums();
+}
+
+
+void APlayerCharacter::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+    
+	// Only update checksums periodically to save performance
+	if (HasAuthority())
+	{
+		TimeSinceLastChecksumUpdate += DeltaTime;
+		if (TimeSinceLastChecksumUpdate >= ChecksumUpdateInterval)
+		{
+			UpdateAllChecksums();
+			TimeSinceLastChecksumUpdate = 0.0f;
+		}
+	}
+}
+
+
+void APlayerCharacter::SetHealth(const float NewHealth)
+{
+	Health = NewHealth;
+
+	// if Server, Update checksyms when health is changed
+	if (HasAuthority())
+	{
+		Checksums.UpdateHealthChecksum(Health);
+	}
+}
+
+
+void APlayerCharacter::UpdateAllChecksums()
+{
+	Checksums.SetLastChecksumPosition(GetActorLocation());
+	Checksums.UpdateHealthChecksum(Health);
+	Checksums.UpdatePositionChecksum(Checksums.GetLastChecksumPosition());
+}
+
+
+void APlayerCharacter::TakeDamage(const float Damage)
+{
+	if (HasAuthority() == true)
+	{
+		if (GetHealth() - Damage< 0)
+		{
+			SetHealth(0);
+		}
+		else
+		{
+			SetHealth(GetHealth() - Damage);
+		}
+
+		// Each client displays the effect
+		Multicast_SpawnHitEffect(GetActorLocation());
+	}
+}
+
+
+bool APlayerCharacter::Server_Attack_Validate()
+{
+	if (!GameMode)
+	{
+		TESTLOG(Warning, TEXT("Failed to GameMode"));
+		return false;
+	}
+    
+	const UAntiCheatManager* AntiCheatManager = GameMode->GetAntiCheatManager();
+	if (!AntiCheatManager)
+	{
+		return false;
+	}
+    
+	// Check if player is valid
+	return AntiCheatManager->VerifyPlayerValid(this);
+}
+
+
+void APlayerCharacter::Server_Attack_Implementation()
+{
+	if (!GameMode)
+	{
+		TESTLOG(Warning, TEXT("Failed to get GameMode"));
+		return;
+	}
+
+	UAntiCheatManager* AntiCheatManager = GameMode->GetAntiCheatManager();
+	if (!AntiCheatManager)
+	{
+		TESTLOG(Warning, TEXT("Failed to get AntiCheatManager"));
+		return;
+	}
+	
+	// Verify checksums
+	if (!AntiCheatManager->VerifyAllChecksums(this) ||
+		!AntiCheatManager->VerifyPositionChecksum(this))
+	{
+		TESTLOG(Warning, TEXT("Checksum verification failed for player %s"), *GetName());
+		return;
+	}
+
+	
+	// Register attack task in thread pool
+	GameMode->ExecuteAttackTask(this);
 }
 
 
@@ -113,68 +244,9 @@ void APlayerCharacter::Client_Attack()
 }
 
 
-void APlayerCharacter::TakeDamage(const float Damage)
-{
-	if (HasAuthority() == true)
-	{
-		if (GetHealth() - Damage< 0)
-		{
-			SetHealth(0);
-		}
-		else
-		{
-			SetHealth(GetHealth() - Damage);
-		}
-
-		// Health 값 체크섬 업데이트
-		UAntiCheatManager::GetInstance()->UpdateHealthChecksum(this);
-
-		// 각 클라이언트가 이펙트를 표출하게 함
-		Multicast_SpawnHitEffect(GetActorLocation());
-	}
-}
 
 
-bool APlayerCharacter::Server_Attack_Validate()
-{
-	return true;
-}
 
-void APlayerCharacter::Server_Attack_Implementation()
-{
-	// 체크섬 검사
-	bool bIsValidChecksum = UAntiCheatManager::GetInstance()->VerifyHealthChecksum(this);
-    
-	if (bIsValidChecksum == false)
-	{
-		return;
-	}
-
-	// 스레드풀에 공격 태스크 등록
-	AMultiGameMode* GameMode = Cast<AMultiGameMode>(GetWorld()->GetAuthGameMode());
-	if (GameMode)
-	{
-		GameMode->ExecuteAttackTask(this);
-	}
-	else
-	{
-		TESTLOG(Warning, TEXT("Failed to GameMode"));
-	}
-	
-	// 비동기 형식으로 작업 생성 및 자동 삭제
-	//(new FAutoDeleteAsyncTask<FTAttackTask>(this))->StartBackgroundTask();
-	
-	// 동기 형식
-	/*
-	// FAsyncTask로 비동기 작업 생성
-	FAsyncTask<FTAttackTask>* Task = new FAsyncTask<FTAttackTask>(this);
-	Task->StartBackgroundTask();
-
-	// 작업 완료 후 삭제
-	Task->EnsureCompletion(); // 동기적으로 완료 대기 (실제로는 비동기 처리 필요)
-	delete Task;
-	*/
-}
 
 
 void APlayerCharacter::OnRep_Health() const

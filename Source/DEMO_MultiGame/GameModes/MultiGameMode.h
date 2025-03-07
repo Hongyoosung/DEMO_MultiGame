@@ -8,6 +8,7 @@
 
 class FTAttackTask;
 class APlayerCharacter;
+class UAntiCheatManager;
 
 
 UCLASS(minimalapi)
@@ -18,21 +19,35 @@ class AMultiGameMode : public ADEMO_MultiGameGameMode
 public:
 	AMultiGameMode();
 
+	
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	
+	
+	FQueuedThreadPool*	GetThreadPool()			const	{		return ThreadPool;			}
+	UAntiCheatManager*	GetAntiCheatManager()	const	{		return AntiCheatManager;	}
 
-	FQueuedThreadPool* GetThreadPool() const { return ThreadPool; }
+	
 	void ExecuteAttackTask(APlayerCharacter* Player);
 
 private:
 	void InitializeAttackTaskPool();
-	FTAttackTask* GetOrCreateAttackTask();
+	
+	void AdjustThreadPoolSize();
+
 	void ReturnAttackTaskToPool(FTAttackTask* Task);
 	
+	FTAttackTask* GetOrCreateAttackTask();
+
 private:
+	UPROPERTY()
+	UAntiCheatManager* AntiCheatManager;
+	
 	FQueuedThreadPool* ThreadPool;
+	
 	TQueue<FTAttackTask*> AttackTaskPool;
+	
 	FCriticalSection AttackTaskPoolLock;
 
-	static const int32 MAX_ATTACK_TASKS = 10;
+	static constexpr int32 MAX_ATTACK_TASKS = 10;
 };

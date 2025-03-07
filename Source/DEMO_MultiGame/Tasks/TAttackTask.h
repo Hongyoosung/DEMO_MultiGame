@@ -8,11 +8,12 @@
 class FTAttackTask : public IQueuedWork
 {
 public:
-	FTAttackTask() : AttackerPlayer(nullptr) {}
+	FTAttackTask() : AttackerPlayer(nullptr), PlayerAttackRange(0.0f) {}
 
 	void Initialize(APlayerCharacter* InPlayer)
 	{
 		AttackerPlayer = InPlayer;
+		PlayerAttackRange = InPlayer->GetAttackRange();
 	}
 
 	// 완료 콜백 설정
@@ -65,7 +66,6 @@ private:
 
 		const FVector Start = AttackerPlayer->GetActorLocation();
 		const FVector End = Start;
-		constexpr float Distance = 300.0f;
 
 		// 구체 형태로 충돌 검사
 		const bool bHit = AttackerPlayer->GetWorld()->SweepMultiByChannel(
@@ -74,7 +74,7 @@ private:
 			End,
 			FQuat::Identity,
 			ECC_Pawn,
-			FCollisionShape::MakeSphere(Distance),
+			FCollisionShape::MakeSphere(PlayerAttackRange),
 			Params);
 
 		if (bHit == false)
@@ -89,11 +89,7 @@ private:
 
 			if (OtherCharacter && OtherCharacter != AttackerPlayer)
 			{
-				// 공격 범위 검증
-				if (UAntiCheatManager::GetInstance()->VerifyAttackRange(AttackerPlayer, OtherCharacter, Distance))
-				{
-					OtherCharacter->TakeDamage(10.0f);
-				}
+				OtherCharacter->TakeDamage(10.0f);
 			}
 		}
 
@@ -103,4 +99,6 @@ private:
 private:
 	APlayerCharacter* AttackerPlayer;
 	TFunction<void(FTAttackTask*)> CompletionCallback;
+
+	float PlayerAttackRange;
 };

@@ -12,13 +12,36 @@ class UAntiCheatManager : public UObject
 	GENERATED_BODY()
 	
 public:
-	static UAntiCheatManager* GetInstance();
+	UAntiCheatManager();
+	virtual ~UAntiCheatManager() override;
 
-	bool VerifyAttackRange(const APlayerCharacter* Attacker, const APlayerCharacter* Target, const float MaxRange) const;
-	bool VerifyHealthChecksum(const APlayerCharacter* Player) const;
-	void UpdateHealthChecksum(APlayerCharacter* Player) const;
+	
+	static UAntiCheatManager* CreateManager();
+	
+
+	// Verification methods
+	bool VerifyAttackRange				(const APlayerCharacter* Attacker, const APlayerCharacter* Target, const float MaxRange) const;
+	bool VerifyHealthChecksum			(const APlayerCharacter* Player) const;
+	bool VerifyPositionChecksum			(const APlayerCharacter* Player) const;
+	bool VerifyPlayerValid				(const APlayerCharacter* Player) const;
+	bool VerifyAllChecksums				(const APlayerCharacter* Player) const;
+
+
+private:
+	// On-the-go checksum verification mitigation logic
+	bool VerifyPositionWithTolerance(const APlayerCharacter* Player) const;
+
 	
 private:
-	UAntiCheatManager();
-	static UAntiCheatManager* Instance;
+	// Helper methods for checksum calculation
+	uint32 CalculateHealthChecksum		(const float Health)		const;
+	uint32 CalculatePositionChecksum	(const FVector& Position)	const;
+
+	// For performance logging
+	UPROPERTY()
+	int32 FailedChecksumCount;
+
+	// Tolerance thresholds for position verification
+	UPROPERTY(EditDefaultsOnly, Category = "AntiCheat")
+	float PositionToleranceThreshold;
 };

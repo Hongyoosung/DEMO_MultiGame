@@ -18,8 +18,11 @@ void AMultiGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 공격 태스크풀 초기화
+	// Initialize AttackTaskPool
 	InitializeAttackTaskPool();
+
+	// Create AntiCheatManager
+	AntiCheatManager = UAntiCheatManager::CreateManager();
 }
 
 void AMultiGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -49,6 +52,11 @@ void AMultiGameMode::InitializeAttackTaskPool()
 	{
 		AttackTaskPool.Enqueue(new FTAttackTask());
 	}
+}
+
+void AMultiGameMode::AdjustThreadPoolSize()
+{
+	
 }
 
 void AMultiGameMode::ExecuteAttackTask(APlayerCharacter* Player)
