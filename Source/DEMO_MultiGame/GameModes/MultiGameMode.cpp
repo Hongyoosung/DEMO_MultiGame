@@ -4,12 +4,13 @@
 #include "UObject/ConstructorHelpers.h"
 #include "HAL/ThreadManager.h"
 #include "Tasks/TAttackTask.h"
+#include "ThreadPool/CustomQueuedThreadPool.h"
 
 
 AMultiGameMode::AMultiGameMode()
 {
 	// 스레드풀 생성
-	ThreadPool = FQueuedThreadPool::Allocate();
+	ThreadPool = FCustomQueuedThreadPool::Allocate();
 	ThreadPool->Create(4, 32 * 1024, TPri_Normal, TEXT("AttackThreadPool"));
 }
 
@@ -23,23 +24,29 @@ void AMultiGameMode::BeginPlay()
 
 	// Create AntiCheatManager
 	AntiCheatManager = UAntiCheatManager::CreateManager();
+	
+	// 2초마다 AdjustThreadPoolSize 호출
+	//GetWorldTimerManager().SetTimer(ThreadPoolAdjustmentTimer, this, &AMultiGameMode::AdjustThreadPoolSize, 2.0f, true);
 }
 
 void AMultiGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	// 남아있는 태스크 정리
+	GetWorldTimerManager().ClearTimer(ThreadPoolAdjustmentTimer);
+	
+	// Clean up thread pool
+	if (ThreadPool)
+	{
+		ThreadPool->WaitForCompletion();
+		ThreadPool->Destroy();
+		delete ThreadPool;
+		ThreadPool = nullptr;
+	}
+
+	// Clean up remaining tasks
 	FTAttackTask* Task;
 	while (AttackTaskPool.Dequeue(Task))
 	{
 		delete Task;
-	}
-
-	// 스레드풀 정리
-	if (ThreadPool)
-	{
-		ThreadPool->Destroy();
-		delete ThreadPool;
-		ThreadPool = nullptr;
 	}
 	
 	Super::EndPlay(EndPlayReason);
@@ -47,34 +54,47 @@ void AMultiGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void AMultiGameMode::InitializeAttackTaskPool()
 {
-	// 태스크풀에 최대 태스크 추가
+	// Add attack tasks to the pool
 	for (int32 i = 0; i < MAX_ATTACK_TASKS; ++i)
 	{
 		AttackTaskPool.Enqueue(new FTAttackTask());
 	}
 }
 
-void AMultiGameMode::AdjustThreadPoolSize()
+void AMultiGameMode::AdjustThreadPoolSize() const
 {
-	
+	const int32 ActiveTasks = ThreadPool->GetActiveTaskCount();
+	const int32 CurrentThreads = ThreadPool->GetNumThreads();
+
+	if (ActiveTasks > CurrentThreads * 0.8f && CurrentThreads < 8)
+	{
+		// 개별 스레드 추가
+		ThreadPool->AddThread(32 * 1024, TPri_Normal, TEXT("AttackThreadPool"));
+	}
+	else if (ActiveTasks < CurrentThreads * 0.2f && CurrentThreads > 2)
+	{
+		// 개별 스레드 제거
+		ThreadPool->RemoveThread();
+	}
 }
 
 void AMultiGameMode::ExecuteAttackTask(APlayerCharacter* Player)
 {
 	if (ThreadPool)
 	{
-		// 태스크풀에서 태스크 가져오기 또는 생성
+		// Import or create tasks from a taskpool
 		FTAttackTask* Task = GetOrCreateAttackTask();
-		Task->Initialize(Player);
+		Task->InitializePlayerValues(Player);
 
-		// 태스크 완료 콜백 설정
+		// Setting up task completion callbacks
 		Task->SetCompletionCallback([this](FTAttackTask* CompletedTask)
 		{
+			CompletedTask->Init();
 			ReturnAttackTaskToPool(CompletedTask);
 		});
 
-		// 스레드풀에 태스크 추가
-		ThreadPool->AddQueuedWork(Task);
+		// Adding a Task to a Threadpool
+		ThreadPool->AddQueuedWork(Task, EQueuedWorkPriority::Normal);
 	}
 }
 

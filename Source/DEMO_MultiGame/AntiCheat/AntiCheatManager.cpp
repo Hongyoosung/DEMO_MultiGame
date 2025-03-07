@@ -5,7 +5,7 @@
 
 
 UAntiCheatManager::UAntiCheatManager()
-	: FailedChecksumCount(0), PositionToleranceThreshold(400.0f)
+	: FailedChecksumCount(0), PositionToleranceThreshold(1000.0f)
 {
 }
 

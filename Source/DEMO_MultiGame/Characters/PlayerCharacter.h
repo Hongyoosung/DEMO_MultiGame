@@ -95,8 +95,6 @@ public:
 
 	
 	// Health Setter & Getter
-	void	SetHealth		(const float NewHealth);
-	void	SetAttackRange	(const float NewRange)		{		AttackRange =	NewRange;		}
 	float	GetHealth		() const					{		return			Health;			}
 	float	GetAttackRange	() const					{		return			AttackRange;	}
 
@@ -109,6 +107,9 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* InputComponent) override;
 
+	// Setters
+	void	SetHealth		(const float NewHealth);
+	void	SetAttackRange	(const float NewRange)		{		AttackRange =	NewRange;		}
 	
 private:
 	UFUNCTION(Server, Reliable, WithValidation)

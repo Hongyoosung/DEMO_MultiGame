@@ -9,6 +9,7 @@
 class FTAttackTask;
 class APlayerCharacter;
 class UAntiCheatManager;
+class FCustomQueuedThreadPool;
 
 
 UCLASS(minimalapi)
@@ -24,8 +25,8 @@ public:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	
 	
-	FQueuedThreadPool*	GetThreadPool()			const	{		return ThreadPool;			}
-	UAntiCheatManager*	GetAntiCheatManager()	const	{		return AntiCheatManager;	}
+	FCustomQueuedThreadPool*	GetThreadPool()			const	{		return ThreadPool;			}
+	UAntiCheatManager*			GetAntiCheatManager()	const	{		return AntiCheatManager;	}
 
 	
 	void ExecuteAttackTask(APlayerCharacter* Player);
@@ -33,7 +34,7 @@ public:
 private:
 	void InitializeAttackTaskPool();
 	
-	void AdjustThreadPoolSize();
+	void AdjustThreadPoolSize() const;
 
 	void ReturnAttackTaskToPool(FTAttackTask* Task);
 	
@@ -43,11 +44,13 @@ private:
 	UPROPERTY()
 	UAntiCheatManager* AntiCheatManager;
 	
-	FQueuedThreadPool* ThreadPool;
+	FCustomQueuedThreadPool* ThreadPool;
 	
 	TQueue<FTAttackTask*> AttackTaskPool;
 	
 	FCriticalSection AttackTaskPoolLock;
+
+	FTimerHandle ThreadPoolAdjustmentTimer;
 
 	static constexpr int32 MAX_ATTACK_TASKS = 10;
 };

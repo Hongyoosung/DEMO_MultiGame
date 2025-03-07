@@ -65,7 +65,8 @@ void APlayerCharacter::BeginPlay()
 void APlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-    
+
+	
 	// Only update checksums periodically to save performance
 	if (HasAuthority())
 	{
@@ -76,6 +77,7 @@ void APlayerCharacter::Tick(float DeltaTime)
 			TimeSinceLastChecksumUpdate = 0.0f;
 		}
 	}
+	
 }
 
 
@@ -103,16 +105,8 @@ void APlayerCharacter::TakeDamage(const float Damage)
 {
 	if (HasAuthority() == true)
 	{
-		if (GetHealth() - Damage< 0)
-		{
-			SetHealth(0);
-		}
-		else
-		{
-			SetHealth(GetHealth() - Damage);
-		}
-
-		// Each client displays the effect
+		const float NewHealth = FMath::Max(0.0f, GetHealth() - Damage);
+		SetHealth(NewHealth); // 변경: SetHealth 호출로 체크섬 업데이트 트리거
 		Multicast_SpawnHitEffect(GetActorLocation());
 	}
 }
@@ -120,20 +114,13 @@ void APlayerCharacter::TakeDamage(const float Damage)
 
 bool APlayerCharacter::Server_Attack_Validate()
 {
-	if (!GameMode)
+	if (!GameMode || !GameMode->GetAntiCheatManager())
 	{
-		TESTLOG(Warning, TEXT("Failed to GameMode"));
+		TESTLOG(Warning, TEXT("Failed to get GameMode or AntiCheatManager"));
 		return false;
 	}
-    
-	const UAntiCheatManager* AntiCheatManager = GameMode->GetAntiCheatManager();
-	if (!AntiCheatManager)
-	{
-		return false;
-	}
-    
-	// Check if player is valid
-	return AntiCheatManager->VerifyPlayerValid(this);
+	
+	return GameMode->GetAntiCheatManager()->VerifyPlayerValid(this);
 }
 
 
@@ -175,52 +162,40 @@ void APlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 
 void APlayerCharacter::Multicast_SpawnHitEffect_Implementation(const FVector Location)
 {
-	// 피격 플레이어에 이펙트를 나타내는 RPC
-	if (HitEffect)
-	{
-		UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), HitEffect, Location);
-	}
+	// RPC to display the effect at the targeted player's location
+	if (!HitEffect)					TESTLOG(Error, TEXT("HitEffect not set"));
+
+	UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), HitEffect, Location);
 }
 
 
 void APlayerCharacter::InitializeHealthWidget()
 {
-	if (HealthBarWidgetComponent)
-	{
-		// 위젯 생성 및 초기화
-		if (HealthWidgetClass)
-		{
-			HealthBarWidgetComponent->SetWidgetClass(HealthWidgetClass);
-			HealthBarWidget = Cast<UHealthBarWidget>(HealthBarWidgetComponent->GetUserWidgetObject());
-			
-			if (HealthBarWidget)
-			{
-				// 체력 UI 초기화
-				UpdateHealthUI();
-			}
-			else
-			{
-				TESTLOG(Warning, TEXT("Failed to create HealthBarWidget"));
-			}
-		}
-		else
-		{
-			TESTLOG(Error, TEXT("HealthWidgetClass not set"));
-		}
-	}
+	if (!HealthBarWidgetComponent)	TESTLOG(Error, TEXT("HealthWidgetClass not set"));
+	
+	// Initialize HealthBarWidget
+	if (!HealthWidgetClass)			TESTLOG(Error, TEXT("HealthWidgetClass not set"));
+	
+		
+	HealthBarWidgetComponent->SetWidgetClass(HealthWidgetClass);
+	HealthBarWidget = Cast<UHealthBarWidget>(HealthBarWidgetComponent->GetUserWidgetObject());
+
+	
+	if (!HealthBarWidget)			TESTLOG(Warning, TEXT("Failed to create HealthBarWidget"));
+	
+	UpdateHealthUI();
 }
 
 
 void APlayerCharacter::UpdateHealthUI() const
 {
-	if (HealthBarWidget)
-	{
-		// 체력 퍼센트 업데이트
-		HealthBarWidget->UpdateHealthBar(GetHealth() / 100.0f);
+	if (!HealthBarWidget)			TESTLOG(Error, TEXT("HealthWidgetClass not set"));
+
+	// Update Health Percent
+	HealthBarWidget->UpdateHealthBar(GetHealth() / 100.0f);
 		
-		// 체력바 색상 업데이트 (자신의 캐릭터인지 여부에 따라)
-		HealthBarWidget->UpdateHealthBarColor(IsLocallyControlled());
-	}
+	// Update Health Bar Color
+	HealthBarWidget->UpdateHealthBarColor(IsLocallyControlled());
 }
 
 
@@ -233,20 +208,8 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 void APlayerCharacter::Client_Attack()
 {
-	if (HasAuthority() == true)
-	{
-		Server_Attack();
-	}
-	else
-	{
-		Server_Attack();
-	}
+	Server_Attack();
 }
-
-
-
-
-
 
 
 void APlayerCharacter::OnRep_Health() const
