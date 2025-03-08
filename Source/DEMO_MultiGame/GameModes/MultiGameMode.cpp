@@ -80,27 +80,53 @@ void AMultiGameMode::AdjustThreadPoolSize() const
 
 void AMultiGameMode::ExecuteAttackTask(APlayerCharacter* Player)
 {
-	if (ThreadPool)
+	if (!ThreadPool || !IsValid(Player))
 	{
-		// Import or create tasks from a taskpool
-		FTAttackTask* Task = GetOrCreateAttackTask();
-		Task->InitializePlayerValues(Player);
+		TESTLOG(Error, TEXT("Invalid ThreadPool or Player"));
+		return;
+	}
 
-		// Setting up task completion callbacks
-		Task->SetCompletionCallback([this](FTAttackTask* CompletedTask)
+	// 태스크 가져오기
+	FTAttackTask* Task = GetOrCreateAttackTask();
+	if (!Task)
+	{
+		TESTLOG(Error, TEXT("Failed to get or create attack task"));
+		return;
+	}
+    
+	// 태스크 초기화
+	Task->InitializePlayerValues(Player);
+
+	// 완료 콜백 설정
+	Task->SetCompletionCallback([this, Task](FTAttackTask* CompletedTask)
+	{
+		check(CompletedTask == Task); // 태스크 일관성 확인
+        
+		// 여기서 Task는 람다에 의해 캡처된 포인터입니다.
+		// 이 시점에서 Task가 여전히 유효한지 확인해야 합니다.
+        
+		if (!CompletedTask->IsReturnedToPool())
 		{
+			// 태스크가 아직 반환되지 않았을 경우에만 초기화 및 반환
 			CompletedTask->Init();
 			ReturnAttackTaskToPool(CompletedTask);
-		});
+		}
+		else
+		{
+			TESTLOG(Warning, TEXT("Task already returned to pool, skipping"));
+		}
+	});
 
-		// Adding a Task to a Threadpool
-		ThreadPool->AddQueuedWork(Task, EQueuedWorkPriority::Normal);
-	}
+	// 스레드풀에 태스크 추가
+	ThreadPool->AddQueuedWork(Task, EQueuedWorkPriority::Normal);
 }
 
 FTAttackTask* AMultiGameMode::GetOrCreateAttackTask()
 {
 	FTAttackTask* Task = nullptr;
+    
+
+    
 	{
 		// 태스크풀에서 태스크 가져오기, 없으면 생성, 태스크풀에 RAII 락 수행
 		FScopeLock Lock(&AttackTaskPoolLock);
@@ -108,16 +134,49 @@ FTAttackTask* AMultiGameMode::GetOrCreateAttackTask()
 		{
 			Task = new FTAttackTask();
 		}
+		else if (Task->IsTaskRunning())
+		{
+			// 풀에서 가져온 태스크가 아직 실행 중이면 새로 생성
+			TESTLOG(Warning, TEXT("Got running task from pool, creating new one"));
+			AttackTaskPool.Enqueue(Task); // 실행 중인 태스크는 다시 풀로
+			Task = new FTAttackTask();
+		}
 	}
-	
+    
+	if (Task)
+	{
+		Task->SetReturnedToPool(false); // 풀에서 꺼낸 상태로 표시
+	}
+    
 	return Task;
 }
 
 void AMultiGameMode::ReturnAttackTaskToPool(FTAttackTask* Task)
 {
-	// 태스크풀에 RAII 락 수행
-	FScopeLock Lock(&AttackTaskPoolLock);
+	if (!Task)
+	{
+		TESTLOG(Error, TEXT("Attempting to return null task to pool"));
+		return;
+	}
 
-	// 태스크풀로 반환
+	// 이미 풀에 반환된 태스크를 다시 반환하지 않도록 함
+	if (Task->IsReturnedToPool())
+	{
+		TESTLOG(Warning, TEXT("Task already returned to pool"));
+		return;
+	}
+
+	// 태스크가 여전히 실행 중인지 확인
+	if (Task->IsTaskRunning())
+	{
+		TESTLOG(Warning, TEXT("Task is still running when returning to pool"));
+		// 이 경우 태스크를 풀에 반환하지 않고 정리만 함
+		// 메모리 누수를 방지하기 위해 나중에 재시도하거나 정리해야 함
+		return;
+	}
+	
+	// 태스크 풀에 안전하게 반환
+	FScopeLock Lock(&AttackTaskPoolLock);
+	Task->SetReturnedToPool(true);
 	AttackTaskPool.Enqueue(Task);
 }

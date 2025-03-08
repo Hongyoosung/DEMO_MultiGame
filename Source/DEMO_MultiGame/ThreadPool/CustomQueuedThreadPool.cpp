@@ -1,6 +1,7 @@
 ﻿#include "CustomQueuedThreadPool.h"
 #include "Thread/CustomThread.h"
 #include "Tasks/PoolableQueuedWork.h"
+#include "DEMO_MultiGame.h"
 
 
 FCustomQueuedThreadPool::FCustomQueuedThreadPool()
@@ -23,16 +24,26 @@ FCustomQueuedThreadPool::~FCustomQueuedThreadPool()
 bool FCustomQueuedThreadPool::Create(const uint32 InNumQueuedThreads, const uint32 StackSize, const EThreadPriority ThreadPriority,
 	const TCHAR* Name)
 {
-	NumThreads = InNumQueuedThreads;
+	bool bWasSuccessful = true;
+	FScopeLock Lock(&SynchronizationObject);
+	
 	for (uint32 i = 0; i < InNumQueuedThreads; ++i)
 	{
 		FCustomThread* NewThread = new FCustomThread(this);
-		Threads.Add(NewThread);
-		FString ThreadName = FString::Printf(TEXT("%s_Thread%d"), Name, i);
-		NewThread->Start(StackSize, ThreadPriority, *ThreadName);
+		if (NewThread != nullptr)
+		{
+			FString ThreadName = FString::Printf(TEXT("%s_Thread%d"), Name, i);
+			NewThread->Start(StackSize, ThreadPriority, *ThreadName);
+			Threads.Add(NewThread);
+		}
+		else
+		{
+			delete NewThread;
+			bWasSuccessful = false;
+		}
 	}
 	
-	return true;
+	return bWasSuccessful;
 }
 
 
@@ -43,7 +54,7 @@ void FCustomQueuedThreadPool::Destroy()
 	for (FCustomThread* Thread : Threads)
 	{
 		Thread->Shutdown();
-		//delete Thread;
+		delete Thread;
 	}
 	Threads.Empty();
 	NumThreads = 0;
@@ -115,26 +126,61 @@ bool FCustomQueuedThreadPool::RetractQueuedWork(IQueuedWork* InQueuedWork)
 
 void FCustomQueuedThreadPool::WaitForCompletion()
 {
-	while (ActiveTaskCounter.GetValue() > 0)
+	const float TimeoutSeconds = 30.0f; // 최대 대기 시간 설정
+	float ElapsedTime = 0.0f;
+	const float SleepInterval = 0.01f;
+    
+	while (ActiveTaskCounter.GetValue() > 0 && ElapsedTime < TimeoutSeconds)
 	{
-		FPlatformProcess::Sleep(0.01f);
+		FPlatformProcess::Sleep(SleepInterval);
+		ElapsedTime += SleepInterval;
+	}
+
+	if (ActiveTaskCounter.GetValue() > 0)
+	{
+		TESTLOG(Warning, TEXT("WaitForCompletion timed out after %.1f seconds with %d active tasks"),
+			TimeoutSeconds, ActiveTaskCounter.GetValue());
 	}
 
 	FScopeLock Lock(&SynchronizationObject);
 	TArray<FPoolableQueuedWork*> AllTasks;
 	FPoolableQueuedWork* Work;
-	while (HighPriorityWork.Dequeue(Work)) AllTasks.Add(Work);
-	while (NormalPriorityWork.Dequeue(Work)) AllTasks.Add(Work);
-	while (LowPriorityWork.Dequeue(Work)) AllTasks.Add(Work);
+    
+	// 각 우선순위 큐에서 남은 작업 가져오기
+	while (HighPriorityWork.Dequeue(Work)) 
+	{
+		if (Work) AllTasks.Add(Work);
+	}
+    
+	while (NormalPriorityWork.Dequeue(Work)) 
+	{
+		if (Work) AllTasks.Add(Work);
+	}
+    
+	while (LowPriorityWork.Dequeue(Work)) 
+	{
+		if (Work) AllTasks.Add(Work);
+	}
 
+	// 남은 작업 정리
 	for (FPoolableQueuedWork* Task : AllTasks)
 	{
 		if (Task)
 		{
-			while (Task->IsTaskRunning())
+			int32 WaitAttempts = 0;
+			const int32 MaxWaitAttempts = 100; // 최대 1초 대기
+            
+			while (Task->IsTaskRunning() && WaitAttempts < MaxWaitAttempts)
 			{
 				FPlatformProcess::Sleep(0.01f); // AsyncTask 완료 대기
+				WaitAttempts++;
 			}
+            
+			if (Task->IsTaskRunning())
+			{
+				TESTLOG(Warning, TEXT("Task still running after wait timeout"));
+			}
+            
 			delete Task;
 		}
 	}
