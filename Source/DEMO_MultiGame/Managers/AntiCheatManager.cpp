@@ -2,10 +2,11 @@
 #include "Characters/PlayerCharacter.h"
 #include "Misc/Crc.h"
 #include "DEMO_MultiGame.h"
+#include "Components/HealthComponent.h"
 
 
 UAntiCheatManager::UAntiCheatManager()
-	: FailedChecksumCount(0), PositionToleranceThreshold(1000.0f)
+	: FailedChecksumCount(0), PositionToleranceThreshold(1000.0f), MaxAllowedSpeed(600.0f)
 {
 }
 
@@ -15,15 +16,6 @@ UAntiCheatManager::~UAntiCheatManager()
 	// Log stats if desired
 	TESTLOG(Warning, TEXT("AntiCheatManager: Total failed checksums: %d"), FailedChecksumCount);
 }
-
-
-UAntiCheatManager* UAntiCheatManager::CreateManager()
-{
-	UAntiCheatManager* Manager = NewObject<UAntiCheatManager>();
-	
-	return Manager;
-}
-
 
 
 bool UAntiCheatManager::VerifyPositionWithTolerance(const APlayerCharacter* Player) const
@@ -89,13 +81,13 @@ bool UAntiCheatManager::VerifyHealthChecksum(const APlayerCharacter* Player) con
 	}
 
 	// Calculate current checksum
-	const uint32 CalculatedChecksum = CalculateHealthChecksum(Player->GetHealth());
+	const uint32 CalculatedChecksum = CalculateHealthChecksum(Player->GetHealthComponent()->GetHealth());
 	
 	// Get stored checksum
 	const uint32 StoredChecksum = Player->GetChecksums().GetHealthChecksum();
 
 	TESTLOG(Log, TEXT("VerifyHealthChecksum: Player=%s, Health=%.2f, CalculatedChecksum=%u, StoredChecksum=%u"),
-		*Player->GetName(), Player->GetHealth(), CalculatedChecksum, StoredChecksum);
+		*Player->GetName(), Player->GetHealthComponent()->GetHealth(), CalculatedChecksum, StoredChecksum);
 
 	const bool bIsValid = (StoredChecksum == CalculatedChecksum);
 
@@ -144,7 +136,7 @@ bool UAntiCheatManager::VerifyPositionChecksum(const APlayerCharacter* Player) c
 
 bool UAntiCheatManager::VerifyPlayerValid(const APlayerCharacter* Player) const
 {
-	return Player && Player->IsValidLowLevel() && !Player->IsPendingKillPending() && Player->GetHealth() > 0;
+	return Player && Player->IsValidLowLevel() && !Player->IsPendingKillPending() && Player->GetHealthComponent()->GetHealth() > 0;
 }
 
 bool UAntiCheatManager::VerifyAllChecksums(const APlayerCharacter* Player) const

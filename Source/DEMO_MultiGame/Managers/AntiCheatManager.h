@@ -7,24 +7,20 @@
 class APlayerCharacter;
 
 UCLASS()
-class UAntiCheatManager : public UObject
+class UAntiCheatManager : public UGameInstanceSubsystem
 {
 	GENERATED_BODY()
 	
 public:
 	UAntiCheatManager();
 	virtual ~UAntiCheatManager() override;
-
 	
-	static UAntiCheatManager* CreateManager();
-	
-
 	// Verification methods
 	bool VerifyAttackRange				(const APlayerCharacter* Attacker, const APlayerCharacter* Target, const float MaxRange) const;
-	bool VerifyHealthChecksum			(const APlayerCharacter* Player) const;
-	bool VerifyPositionChecksum			(const APlayerCharacter* Player) const;
-	bool VerifyPlayerValid				(const APlayerCharacter* Player) const;
-	bool VerifyAllChecksums				(const APlayerCharacter* Player) const;
+	bool VerifyPlayerValid				(const APlayerCharacter* Player)	const;
+	bool VerifyHealthChecksum			(const APlayerCharacter* Player)	const;
+	bool VerifyPositionChecksum			(const APlayerCharacter* Player)	const;
+	bool VerifyAllChecksums				(const APlayerCharacter* Player)	const;
 
 
 private:
@@ -37,11 +33,13 @@ private:
 	uint32 CalculateHealthChecksum		(const float Health)		const;
 	uint32 CalculatePositionChecksum	(const FVector& Position)	const;
 
-	// For performance logging
-	UPROPERTY()
-	int32 FailedChecksumCount;
-
+	UPROPERTY(EditDefaultsOnly, Category = "AntiCheat")
+	float MaxAllowedSpeed;
+	
 	// Tolerance thresholds for position verification
 	UPROPERTY(EditDefaultsOnly, Category = "AntiCheat")
 	float PositionToleranceThreshold;
+
+	// For performance logging
+	int32 FailedChecksumCount;
 };

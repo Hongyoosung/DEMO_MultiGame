@@ -3,7 +3,7 @@
 #include "Characters/PlayerCharacter.h"
 #include "Async/AsyncWork.h"
 #include "Tasks/PoolableQueuedWork.h"
-#include "AntiCheat/AntiCheatManager.h"
+#include "Managers/AntiCheatManager.h"
 
 class FTAttackTask : public FPoolableQueuedWork
 {

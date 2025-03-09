@@ -23,7 +23,7 @@ void AMultiGameMode::BeginPlay()
 	InitializeAttackTaskPool();
 
 	// Create AntiCheatManager
-	AntiCheatManager = UAntiCheatManager::CreateManager();
+	AntiCheatManager = GetGameInstance()->GetSubsystem<UAntiCheatManager>();
 	
 	// 2초마다 AdjustThreadPoolSize 호출
 	//GetWorldTimerManager().SetTimer(ThreadPoolAdjustmentTimer, this, &AMultiGameMode::AdjustThreadPoolSize, 2.0f, true);
@@ -123,28 +123,23 @@ void AMultiGameMode::ExecuteAttackTask(APlayerCharacter* Player)
 FTAttackTask* AMultiGameMode::GetOrCreateAttackTask()
 {
 	FTAttackTask* Task = nullptr;
-    
+
 	{
-		// 태스크풀에서 태스크 가져오기, 없으면 생성, 태스크풀에 RAII 락 수행
+		// 태스크풀에서 태스크 가져오기, 없으면 생성
 		FScopeLock Lock(&AttackTaskPoolLock);
 		if (!AttackTaskPool.Dequeue(Task))
 		{
-			Task = new FTAttackTask();
-		}
-		else if (Task->IsTaskRunning())
-		{
-			// 풀에서 가져온 태스크가 아직 실행 중이면 새로 생성
-			TESTLOG(Warning, TEXT("Got running task from pool, creating new one"));
-			AttackTaskPool.Enqueue(Task); // 실행 중인 태스크는 다시 풀로
+			// 풀에서 사용할 수 있는 태스크가 없으면 새로 생성
 			Task = new FTAttackTask();
 		}
 	}
-    
+
 	if (Task)
 	{
-		Task->SetReturnedToPool(false); // 풀에서 꺼낸 상태로 표시
+		// 풀에서 꺼낸 상태로 표시
+		Task->SetReturnedToPool(false);
 	}
-    
+
 	return Task;
 }
 
@@ -163,15 +158,14 @@ void AMultiGameMode::ReturnAttackTaskToPool(FTAttackTask* Task)
 		return;
 	}
 
-	// 태스크가 여전히 실행 중인지 확인
+	// 실행 중인 상태에서는 반환하지 않음
 	if (Task->IsTaskRunning())
 	{
-		TESTLOG(Warning, TEXT("Task is still running when returning to pool"));
-
-		Task->Abandon(); // 실행 중이면 강제 종료
+		TESTLOG(Warning, TEXT("Cannot return a running task to the pool"));
+		return;
 	}
-	
-	// 태스크 풀에 안전하게 반환
+
+	// 안전하게 초기화 후 반환
 	FScopeLock Lock(&AttackTaskPoolLock);
 	Task->Init();
 	Task->SetReturnedToPool(true);
