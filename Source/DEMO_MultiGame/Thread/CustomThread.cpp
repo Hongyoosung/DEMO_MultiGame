@@ -4,6 +4,20 @@
 #include "ThreadPool/CustomQueuedThreadPool.h"
 #include "Tasks/PoolableQueuedWork.h"
 
+FCustomThread::FCustomThread(FCustomQueuedThreadPool* InPool): Pool(InPool), bShutdown(false), Thread(nullptr)
+{
+}
+
+FCustomThread::~FCustomThread()
+{
+	//Shutdown();
+}
+
+void FCustomThread::Start(const uint32 StackSize, const EThreadPriority Priority, const TCHAR* Name)
+{
+	Thread = FRunnableThread::Create(this, Name, StackSize, Priority);
+}
+
 uint32 FCustomThread::Run()
 {
 	while (!bShutdown)

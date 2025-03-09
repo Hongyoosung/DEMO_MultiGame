@@ -10,21 +10,17 @@ class FCustomQueuedThreadPool;
 class FCustomThread : public FRunnable
 {
 public:
-    FCustomThread(FCustomQueuedThreadPool* InPool)
-        : Pool(InPool), bShutdown(false), Thread(nullptr)
-    {}
+    FCustomThread(FCustomQueuedThreadPool* InPool);
+    ~FCustomThread() override;
 
     
     virtual bool    Init()  override { return true; }
     virtual void    Exit()  override {}
     virtual uint32  Run()   override;
+    virtual void    Stop()  override { bShutdown = true; }
 
     
-    void Start(const uint32 StackSize, const EThreadPriority Priority, const TCHAR* Name)
-    {
-        Thread = FRunnableThread::Create(this, Name, StackSize, Priority);
-    }
-
+    void Start(const uint32 StackSize, const EThreadPriority Priority, const TCHAR* Name);
     void Shutdown();
 
     

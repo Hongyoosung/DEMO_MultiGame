@@ -33,6 +33,7 @@ public:
     virtual int32 GetNumThreads() const override {  return NumThreads;  }
 
     void WaitForCompletion();
+    void ForceShutDown();
     
     bool AddThread(uint32 StackSize, EThreadPriority ThreadPriority, const TCHAR* Name);
     void IncrementActiveTaskCount   ()      {       ActiveTaskCounter.Increment();      }
@@ -46,7 +47,7 @@ public:
     FCriticalSection& GetSynchronizationObject                              ()          {   return SynchronizationObject;   }
     FEvent* GetWorkAvailableEvent                                           ()  const   {   return WorkAvailableEvent;      }
     
-    int32                                   GetActiveTaskCount  ()  const   {   return ActiveTaskCounter.GetValue();    }
+    int32                                           GetActiveTaskCount      ()  const   {   return ActiveTaskCounter.GetValue();    }
     
 
 private:
@@ -59,6 +60,7 @@ private:
     FCriticalSection                                SynchronizationObject;  // 동기화 객체
     
     FThreadSafeCounter                              ActiveTaskCounter;      // 활성 작업 카운터
+    FThreadSafeBool                                 bIsDestroying;
     
     int32                                           NumThreads = 0;         // 스레드 수
 

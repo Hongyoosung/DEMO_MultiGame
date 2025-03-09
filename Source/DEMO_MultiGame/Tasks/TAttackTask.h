@@ -71,7 +71,20 @@ public:
         });
     }
 
-    virtual void Abandon() override {}
+    virtual void Abandon() override
+    {
+        if (IsTaskRunning())
+        {
+            TESTLOG(Warning, TEXT("Abandoning task %p"), this);
+            SetTaskRunning(false); // 태스크 실행 상태 해제
+            if (CompletionCallback)
+            {
+                // 게임 스레드에서 콜백을 호출하지 않고 즉시 실행
+                CompletionCallback(this);
+                CompletionCallback = nullptr;
+            }
+        }
+    }
 
     virtual void Init() override
     {
@@ -97,7 +110,7 @@ private:
         // 이미 완료된 태스크를 다시 완료하지 않도록 함
         if (!bIsTaskRunning)
         {
-            SetTaskRunning(false);
+            bIsTaskRunning = false;
             
             // 완료 콜백을 호출하기 전에 게임 스레드에 있는지 확인
             if (!IsInGameThread())

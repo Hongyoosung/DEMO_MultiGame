@@ -47,7 +47,9 @@ APlayerCharacter::APlayerCharacter()
 void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-
+	
+	FPlatformProcess::Sleep(0.2f);
+	
 	// Initialize GameMode
 	GameMode = Cast<AMultiGameMode>(GetWorld()->GetAuthGameMode());
 	if (!GameMode)

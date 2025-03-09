@@ -38,6 +38,7 @@ void AMultiGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		ThreadPool->WaitForCompletion();
 		ThreadPool->Destroy();
+		
 		delete ThreadPool;
 		ThreadPool = nullptr;
 	}
@@ -48,6 +49,8 @@ void AMultiGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		delete Task;
 	}
+
+	
 	
 	Super::EndPlay(EndPlayReason);
 }
@@ -102,13 +105,9 @@ void AMultiGameMode::ExecuteAttackTask(APlayerCharacter* Player)
 	{
 		check(CompletedTask == Task); // 태스크 일관성 확인
         
-		// 여기서 Task는 람다에 의해 캡처된 포인터입니다.
-		// 이 시점에서 Task가 여전히 유효한지 확인해야 합니다.
-        
 		if (!CompletedTask->IsReturnedToPool())
 		{
 			// 태스크가 아직 반환되지 않았을 경우에만 초기화 및 반환
-			CompletedTask->Init();
 			ReturnAttackTaskToPool(CompletedTask);
 		}
 		else
@@ -124,8 +123,6 @@ void AMultiGameMode::ExecuteAttackTask(APlayerCharacter* Player)
 FTAttackTask* AMultiGameMode::GetOrCreateAttackTask()
 {
 	FTAttackTask* Task = nullptr;
-    
-
     
 	{
 		// 태스크풀에서 태스크 가져오기, 없으면 생성, 태스크풀에 RAII 락 수행
@@ -170,13 +167,13 @@ void AMultiGameMode::ReturnAttackTaskToPool(FTAttackTask* Task)
 	if (Task->IsTaskRunning())
 	{
 		TESTLOG(Warning, TEXT("Task is still running when returning to pool"));
-		// 이 경우 태스크를 풀에 반환하지 않고 정리만 함
-		// 메모리 누수를 방지하기 위해 나중에 재시도하거나 정리해야 함
-		return;
+
+		Task->Abandon(); // 실행 중이면 강제 종료
 	}
 	
 	// 태스크 풀에 안전하게 반환
 	FScopeLock Lock(&AttackTaskPoolLock);
+	Task->Init();
 	Task->SetReturnedToPool(true);
 	AttackTaskPool.Enqueue(Task);
 }
