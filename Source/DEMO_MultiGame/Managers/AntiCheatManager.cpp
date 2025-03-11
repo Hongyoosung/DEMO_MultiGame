@@ -13,13 +13,16 @@ UAntiCheatManager::UAntiCheatManager()
 
 UAntiCheatManager::~UAntiCheatManager()
 {
+#ifdef UE_SERVER
 	// Log stats if desired
 	TESTLOG(Warning, TEXT("AntiCheatManager: Total failed checksums: %d"), FailedChecksumCount);
+#endif
 }
 
 
 bool UAntiCheatManager::VerifyPositionWithTolerance(const APlayerCharacter* Player) const
 {
+#ifdef UE_SERVER
 	const FVector CurrentPosition = Player->GetActorLocation();
 	const FVector LastChecksumPosition = Player->GetChecksums().GetLastChecksumPosition();
     
@@ -39,11 +42,15 @@ bool UAntiCheatManager::VerifyPositionWithTolerance(const APlayerCharacter* Play
 	const_cast<UAntiCheatManager*>(this)->FailedChecksumCount++;
 	
 	return false;
+#else
+	return true;
+#endif
 }
 
 
 bool UAntiCheatManager::VerifyAttackRange(const APlayerCharacter* Attacker, const APlayerCharacter* Target, const float MaxRange) const
 {
+#ifdef UE_SERVER
 	if (!Attacker || !Target) 
 	{
 		return false;
@@ -57,23 +64,35 @@ bool UAntiCheatManager::VerifyAttackRange(const APlayerCharacter* Attacker, cons
 	}
 
 	return true;
+#else
+	return true;
+#endif
 }
 
 
 uint32 UAntiCheatManager::CalculateHealthChecksum(const float Health) const
 {
+#ifdef UE_SERVER
 	return FCrc::MemCrc32(&Health, sizeof(Health));
+#else
+	return 0;
+#endif
 }
 
 
 uint32 UAntiCheatManager::CalculatePositionChecksum(const FVector& Position) const
 {
+#ifdef UE_SERVER
 	return FCrc::MemCrc32(&Position, sizeof(FVector));
+#else
+	return 0;
+#endif
 }
 
 
 bool UAntiCheatManager::VerifyHealthChecksum(const APlayerCharacter* Player) const
 {
+#ifdef UE_SERVER
 	if (!Player)
 	{
 		TESTLOG(Warning, TEXT("VerifyHealthChecksum: Player is null"));
@@ -98,11 +117,15 @@ bool UAntiCheatManager::VerifyHealthChecksum(const APlayerCharacter* Player) con
 	}
 
 	return bIsValid;
+#else
+	return true;
+#endif
 }
 
 
 bool UAntiCheatManager::VerifyPositionChecksum(const APlayerCharacter* Player) const
 {
+#ifdef UE_SERVER
 	if (!Player)
 	{
 		TESTLOG(Warning, TEXT("VerifyPositionChecksum: Player is null"));
@@ -131,16 +154,27 @@ bool UAntiCheatManager::VerifyPositionChecksum(const APlayerCharacter* Player) c
 	}
 
 	return bIsValid;
+#else
+	return true;
+#endif
 }
 
 
 bool UAntiCheatManager::VerifyPlayerValid(const APlayerCharacter* Player) const
 {
+#ifdef UE_SERVER
 	return Player && Player->IsValidLowLevel() && !Player->IsPendingKillPending() && Player->GetHealthComponent()->GetHealth() > 0;
+#else
+	return true;
+#endif
 }
 
 bool UAntiCheatManager::VerifyAllChecksums(const APlayerCharacter* Player) const
 {
+#ifdef UE_SERVER
 	// Verify all checksums at once
 	return VerifyHealthChecksum(Player) && VerifyPositionChecksum(Player);
+#else
+	return true;
+#endif
 }

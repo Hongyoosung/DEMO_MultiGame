@@ -4,23 +4,29 @@
 
 void UHealthBarWidget::NativeConstruct()
 {
+//#ifndef UE_SERVER
 	UUserWidget::NativeConstruct();
+//#endif
 }
 
 void UHealthBarWidget::UpdateHealthBar(float HealthPercentage)
 {
+//#ifndef UE_SERVER
 	if (HealthBar)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("HealthBarWidget::UpdateHealthBar ::::::::::: %f"), HealthPercentage);
 		HealthBar->SetPercent(HealthPercentage);
 	}
+//#endif
 }
 
 void UHealthBarWidget::UpdateHealthBarColor(bool bIsOwnPlayer) const
 {
+//#ifndef UE_SERVER
 	if (HealthBar)
 	{
 		const FLinearColor BarColor = bIsOwnPlayer ? FLinearColor::Green : FLinearColor::Red;
 		HealthBar->SetFillColorAndOpacity(BarColor);
 	}
+//#endif
 }

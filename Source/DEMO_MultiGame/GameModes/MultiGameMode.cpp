@@ -9,9 +9,11 @@
 
 AMultiGameMode::AMultiGameMode()
 {
+#ifdef UE_SERVER
 	// 스레드풀 생성
 	ThreadPool = FCustomQueuedThreadPool::Allocate();
 	ThreadPool->Create(4, 32 * 1024, TPri_Normal, TEXT("AttackThreadPool"));
+#endif
 }
 
 
@@ -19,18 +21,21 @@ void AMultiGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 
+#ifdef UE_SERVER
 	// Initialize AttackTaskPool
 	InitializeAttackTaskPool();
 
 	// Create AntiCheatManager
 	AntiCheatManager = GetGameInstance()->GetSubsystem<UAntiCheatManager>();
-	
+
 	// 2초마다 AdjustThreadPoolSize 호출
 	//GetWorldTimerManager().SetTimer(ThreadPoolAdjustmentTimer, this, &AMultiGameMode::AdjustThreadPoolSize, 2.0f, true);
+#endif
 }
 
 void AMultiGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+#ifdef UE_SERVER
 	GetWorldTimerManager().ClearTimer(ThreadPoolAdjustmentTimer);
 	
 	// Clean up thread pool
@@ -50,22 +55,24 @@ void AMultiGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		delete Task;
 	}
 
-	
-	
+#endif
 	Super::EndPlay(EndPlayReason);
 }
 
 void AMultiGameMode::InitializeAttackTaskPool()
 {
+#ifdef UE_SERVER
 	// Add attack tasks to the pool
 	for (int32 i = 0; i < MAX_ATTACK_TASKS; ++i)
 	{
 		AttackTaskPool.Enqueue(new FTAttackTask());
 	}
+#endif
 }
 
 void AMultiGameMode::AdjustThreadPoolSize() const
 {
+#ifdef UE_SERVER
 	const int32 ActiveTasks = ThreadPool->GetActiveTaskCount();
 	const int32 CurrentThreads = ThreadPool->GetNumThreads();
 
@@ -79,10 +86,12 @@ void AMultiGameMode::AdjustThreadPoolSize() const
 		// 개별 스레드 제거
 		ThreadPool->RemoveThread();
 	}
+#endif
 }
 
 void AMultiGameMode::ExecuteAttackTask(APlayerCharacter* Player)
 {
+#ifdef UE_SERVER
 	if (!ThreadPool || !IsValid(Player))
 	{
 		TESTLOG(Error, TEXT("Invalid ThreadPool or Player"));
@@ -118,10 +127,12 @@ void AMultiGameMode::ExecuteAttackTask(APlayerCharacter* Player)
 
 	// 스레드풀에 태스크 추가
 	ThreadPool->AddQueuedWork(Task, EQueuedWorkPriority::Normal);
+#endif
 }
 
 FTAttackTask* AMultiGameMode::GetOrCreateAttackTask()
 {
+#ifdef UE_SERVER
 	FTAttackTask* Task = nullptr;
 
 	{
@@ -141,10 +152,14 @@ FTAttackTask* AMultiGameMode::GetOrCreateAttackTask()
 	}
 
 	return Task;
+#else
+	return nullptr;
+#endif
 }
 
 void AMultiGameMode::ReturnAttackTaskToPool(FTAttackTask* Task)
 {
+#ifdef UE_SERVER
 	if (!Task)
 	{
 		TESTLOG(Error, TEXT("Attempting to return null task to pool"));
@@ -170,4 +185,5 @@ void AMultiGameMode::ReturnAttackTaskToPool(FTAttackTask* Task)
 	Task->Init();
 	Task->SetReturnedToPool(true);
 	AttackTaskPool.Enqueue(Task);
+#endif
 }

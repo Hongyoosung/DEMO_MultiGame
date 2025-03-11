@@ -29,7 +29,8 @@ void UPlayerUIComponent::BeginPlay()
         TESTLOG(Error, TEXT("PlayerUIComponent not attached to PlayerCharacter"));
         return;
     }
-    
+
+//#ifndef UE_SERVER
     // Create widget component if it doesn't exist
     if (!HealthBarWidgetComponent)
     {
@@ -55,6 +56,7 @@ void UPlayerUIComponent::BeginPlay()
     {
         HealthComp->OnHealthChanged.AddDynamic(this, &UPlayerUIComponent::UpdateHealthUI);
     }
+//#endif
 }
 
 void UPlayerUIComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -65,6 +67,7 @@ void UPlayerUIComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 
 void UPlayerUIComponent::InitializeHealthWidget()
 {
+//#ifndef UE_SERVER
     if (!HealthBarWidgetComponent)
     {
         TESTLOG(Error, TEXT("HealthBarWidgetComponent not set"));
@@ -95,10 +98,12 @@ void UPlayerUIComponent::InitializeHealthWidget()
             UpdateHealthUI(HealthComp->GetHealth() / 100.0f);
         }
     }
+//#endif
 }
 
 void UPlayerUIComponent::UpdateHealthUI(const float HealthPercent)
 {
+//#ifndef UE_SERVER
     TESTLOG(Warning, TEXT("UpdateHealthUI: %f"), HealthPercent);
     if (!HealthBarWidget)
     {
@@ -115,4 +120,5 @@ void UPlayerUIComponent::UpdateHealthUI(const float HealthPercent)
         bIsLocallyControlled = OwnerCharacter->IsLocallyControlled();
     }
     HealthBarWidget->UpdateHealthBarColor(bIsLocallyControlled);
+//#endif
 }

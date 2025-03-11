@@ -39,18 +39,23 @@ void UHealthComponent::SetHealth(float NewHealth)
 {
 	const float OldHealth = Health;
 	Health = FMath::Clamp(NewHealth, 0.0f, MaxHealth);
-	
+
+#ifdef UE_SERVER
 	// Update checksums on server
 	if (GetOwnerRole() == ROLE_Authority && OwnerCharacter)
 	{
 		OwnerCharacter->UpdateAllChecksums();
 	}
+#endif
 }
 
 void UHealthComponent::OnRep_Health()
 {
+
+//#ifndef UE_SERVER
 	HealthPercent = (MaxHealth > 0.0f) ? (Health / MaxHealth) : 0.0f;
 	
 	// Notify listeners about health change
 	OnHealthChanged.Broadcast(HealthPercent);
+//#endif
 }

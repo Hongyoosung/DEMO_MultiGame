@@ -15,11 +15,14 @@ FCustomThread::~FCustomThread()
 
 void FCustomThread::Start(const uint32 StackSize, const EThreadPriority Priority, const TCHAR* Name)
 {
+#ifdef UE_SERVER
 	Thread = FRunnableThread::Create(this, Name, StackSize, Priority);
+#endif
 }
 
 uint32 FCustomThread::Run()
 {
+#ifdef UE_SERVER
 	while (!bShutdown)
 	{
 		FPoolableQueuedWork* Work = nullptr;
@@ -69,11 +72,15 @@ uint32 FCustomThread::Run()
 		}
 	}
 	return 0;
+#else
+	return 0;
+#endif
 }
 
 
 void FCustomThread::Shutdown()
 {
+#ifdef UE_SERVER
 	bShutdown = true;
 	Pool->GetWorkAvailableEvent()->Trigger();
 	if (Thread)
@@ -82,4 +89,5 @@ void FCustomThread::Shutdown()
 		delete Thread;
 		Thread = nullptr;
 	}
+#endif
 }

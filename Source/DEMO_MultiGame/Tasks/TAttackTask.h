@@ -12,21 +12,26 @@ public:
 
     void InitializePlayerValues(APlayerCharacter* InPlayer)
     {
+#ifdef UE_SERVER
         AttackerPlayerWeak = InPlayer;
         PlayerAttackRange = InPlayer->GetAttackRange();
 
         // 필요한 데이터 복사 (객체 의존성 줄이기)
         CachedAttackerLocation = InPlayer->GetActorLocation();
         CachedAttackerName = InPlayer->GetName();
+#endif
     }
 
     void SetCompletionCallback(TFunction<void(FTAttackTask*)> InCallback)
     {
+#ifdef UE_SERVER
         CompletionCallback = MoveTemp(InCallback);
+#endif
     }
 
     virtual void DoThreadedWork() override
     {
+#ifdef UE_SERVER
         SetTaskRunning(true);
         
         APlayerCharacter* AttackerPlayer = AttackerPlayerWeak.Get();
@@ -69,10 +74,12 @@ public:
 
             FinishTask();
         });
+#endif
     }
 
     virtual void Abandon() override
     {
+#ifdef UE_SERVER
         if (IsTaskRunning())
         {
             TESTLOG(Warning, TEXT("Abandoning task %p"), this);
@@ -84,10 +91,12 @@ public:
                 CompletionCallback = nullptr;
             }
         }
+#endif
     }
 
     virtual void Init() override
     {
+#ifdef UE_SERVER
         if (IsTaskRunning())
         {
             TESTLOG(Warning, TEXT("Task is still running, skipping Init"));
@@ -102,11 +111,13 @@ public:
         CachedAttackerName = TEXT("");
         SetReturnedToPool(true);
         SetTaskRunning(false); // 상태 재설정
+#endif
     }
 
 private:
     void FinishTask()
     {
+#ifdef UE_SERVER
         // 이미 완료된 태스크를 다시 완료하지 않도록 함
         if (!bIsTaskRunning)
         {
@@ -136,10 +147,11 @@ private:
             }
         }
     }
-
+#endif
     
     void ApplyDamageToHitPlayers(const TArray<FHitResult>& HitResults)
     {
+#ifdef UE_SERVER
         check(IsInGameThread());
 
         if (!AttackerPlayerWeak.Get() || !AttackerPlayerWeak->IsValidLowLevel())
@@ -162,10 +174,12 @@ private:
                 TESTLOG(Error, TEXT("Hit actor is not a valid player character!"));
             }
         }
+#endif
     }
 
     void PerformCollisionDetection(const FVector& Start, float Range, TWeakObjectPtr<UWorld> WorldPtr, TArray<FHitResult>& OutHitResults) const
     {
+#ifdef UE_SERVER
         check(IsInGameThread()); // 게임 스레드에서만 호출되도록 보장
 
         if (!WorldPtr.IsValid())
@@ -202,6 +216,7 @@ private:
         {
             return !Cast<APlayerCharacter>(Hit.GetActor());
         });
+#endif
     }
 
 private:
