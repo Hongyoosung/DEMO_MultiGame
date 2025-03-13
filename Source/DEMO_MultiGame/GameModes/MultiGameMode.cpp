@@ -1,13 +1,14 @@
-﻿#include "MultiGameMode.h"
-#include "DEMO_MultiGamePlayerController.h"
-#include "DEMO_MultiGameCharacter.h"
+﻿#include "DEMO_MultiGame.h"
+#include "MultiGameMode.h"
 #include "UObject/ConstructorHelpers.h"
-#include "HAL/ThreadManager.h"
 #include "Tasks/TAttackTask.h"
+#include "Tasks/TUserItemTask.h"
+#include "Tasks/TAcquireItemTask.h"
 #include "ThreadPool/CustomQueuedThreadPool.h"
+#include "Managers/AntiCheatManager.h"
 
 
-AMultiGameMode::AMultiGameMode()
+AMultiGameMode::AMultiGameMode() : AntiCheatManager(nullptr), ThreadPool(nullptr)
 {
 #ifdef UE_SERVER
 	// 스레드풀 생성
@@ -63,7 +64,7 @@ void AMultiGameMode::InitializeAttackTaskPool()
 {
 #ifdef UE_SERVER
 	// Add attack tasks to the pool
-	for (int32 i = 0; i < MAX_ATTACK_TASKS; ++i)
+	for (int32 i = 0; i < MAX_TASKS; ++i)
 	{
 		AttackTaskPool.Enqueue(new FTAttackTask());
 	}
@@ -89,26 +90,10 @@ void AMultiGameMode::AdjustThreadPoolSize() const
 #endif
 }
 
-void AMultiGameMode::ExecuteAttackTask(APlayerCharacter* Player)
+void AMultiGameMode::ExecuteAttackTask(FTAttackTask* Task)
 {
 #ifdef UE_SERVER
-	if (!ThreadPool || !IsValid(Player))
-	{
-		TESTLOG(Error, TEXT("Invalid ThreadPool or Player"));
-		return;
-	}
-
-	// 태스크 가져오기
-	FTAttackTask* Task = GetOrCreateAttackTask();
-	if (!Task)
-	{
-		TESTLOG(Error, TEXT("Failed to get or create attack task"));
-		return;
-	}
-    
-	// 태스크 초기화
-	Task->InitializePlayerValues(Player);
-
+	
 	// 완료 콜백 설정
 	Task->SetCompletionCallback([this, Task](FTAttackTask* CompletedTask)
 	{
@@ -117,7 +102,7 @@ void AMultiGameMode::ExecuteAttackTask(APlayerCharacter* Player)
 		if (!CompletedTask->IsReturnedToPool())
 		{
 			// 태스크가 아직 반환되지 않았을 경우에만 초기화 및 반환
-			ReturnAttackTaskToPool(CompletedTask);
+			ReturnTaskToPool(CompletedTask);
 		}
 		else
 		{
@@ -130,6 +115,51 @@ void AMultiGameMode::ExecuteAttackTask(APlayerCharacter* Player)
 #endif
 }
 
+
+void AMultiGameMode::ExecuteAcquireItemTask(FTAcquireItemTask* Task)
+{
+#ifdef UE_SERVER
+	// 완료 콜백 설정
+	Task->SetCompletionCallback([this, Task](FTAcquireItemTask* CompletedTask)
+	{
+		check(CompletedTask == Task); // 태스크 일관성 확인
+        
+		if (!CompletedTask->IsReturnedToPool())
+		{
+			// 태스크가 아직 반환되지 않았을 경우에만 초기화 및 반환
+			ReturnTaskToPool(CompletedTask);
+		}
+		else
+		{
+			TESTLOG(Warning, TEXT("Task already returned to pool, skipping"));
+		}
+	});
+#endif
+}
+
+
+void AMultiGameMode::ExecuteUseItemTask(FTUseItemTask* Task)
+{
+#ifdef UE_SERVER
+	// 완료 콜백 설정
+	Task->SetCompletionCallback([this, Task](FTUseItemTask* CompletedTask)
+	{
+		check(CompletedTask == Task); // 태스크 일관성 확인
+        
+		if (!CompletedTask->IsReturnedToPool())
+		{
+			// 태스크가 아직 반환되지 않았을 경우에만 초기화 및 반환
+			ReturnTaskToPool(CompletedTask);
+		}
+		else
+		{
+			TESTLOG(Warning, TEXT("Task already returned to pool, skipping"));
+		}
+	});
+#endif
+}
+
+
 FTAttackTask* AMultiGameMode::GetOrCreateAttackTask()
 {
 #ifdef UE_SERVER
@@ -137,7 +167,7 @@ FTAttackTask* AMultiGameMode::GetOrCreateAttackTask()
 
 	{
 		// 태스크풀에서 태스크 가져오기, 없으면 생성
-		FScopeLock Lock(&AttackTaskPoolLock);
+		FScopeLock Lock(&TaskPoolLock);
 		if (!AttackTaskPool.Dequeue(Task))
 		{
 			// 풀에서 사용할 수 있는 태스크가 없으면 새로 생성
@@ -157,7 +187,64 @@ FTAttackTask* AMultiGameMode::GetOrCreateAttackTask()
 #endif
 }
 
-void AMultiGameMode::ReturnAttackTaskToPool(FTAttackTask* Task)
+
+FTAcquireItemTask* AMultiGameMode::GetOrCreateAcquireItemTask()
+{
+#ifdef UE_SERVER
+	FTAcquireItemTask* Task = nullptr;
+
+	{
+		// 태스크풀에서 태스크 가져오기, 없으면 생성
+		FScopeLock Lock(&TaskPoolLock);
+		if (!AcquireItemTaskPool.Dequeue(Task))
+		{
+			// 풀에서 사용할 수 있는 태스크가 없으면 새로 생성
+			Task = new FTAcquireItemTask();
+		}
+	}
+
+	if (Task)
+	{
+		// 풀에서 꺼낸 상태로 표시
+		Task->SetReturnedToPool(false);
+	}
+
+	return Task;
+#else
+	return nullptr;
+#endif
+}
+
+
+FTUseItemTask* AMultiGameMode::GetOrCreateUseItemTask()
+{
+#ifdef UE_SERVER
+	FTUseItemTask* Task = nullptr;
+
+	{
+		// 태스크풀에서 태스크 가져오기, 없으면 생성
+		FScopeLock Lock(&TaskPoolLock);
+		if (!UseItemTaskPool.Dequeue(Task))
+		{
+			// 풀에서 사용할 수 있는 태스크가 없으면 새로 생성
+			Task = new FTUseItemTask();
+		}
+	}
+
+	if (Task)
+	{
+		// 풀에서 꺼낸 상태로 표시
+		Task->SetReturnedToPool(false);
+	}
+
+	return Task;
+#else
+	return nullptr;
+#endif
+}
+
+
+void AMultiGameMode::ReturnTaskToPool(FTAttackTask* Task)
 {
 #ifdef UE_SERVER
 	if (!Task)
@@ -181,9 +268,73 @@ void AMultiGameMode::ReturnAttackTaskToPool(FTAttackTask* Task)
 	}
 
 	// 안전하게 초기화 후 반환
-	FScopeLock Lock(&AttackTaskPoolLock);
+	FScopeLock Lock(&TaskPoolLock);
 	Task->Init();
 	Task->SetReturnedToPool(true);
 	AttackTaskPool.Enqueue(Task);
+#endif
+}
+
+
+void AMultiGameMode::ReturnTaskToPool(FTAcquireItemTask* Task)
+{
+#ifdef UE_SERVER
+	if (!Task)
+	{
+		TESTLOG(Error, TEXT("Attempting to return null task to pool"));
+		return;
+	}
+
+	// 이미 풀에 반환된 태스크를 다시 반환하지 않도록 함
+	if (Task->IsReturnedToPool())
+	{
+		TESTLOG(Warning, TEXT("Task already returned to pool"));
+		return;
+	}
+
+	// 실행 중인 상태에서는 반환하지 않음
+	if (Task->IsTaskRunning())
+	{
+		TESTLOG(Warning, TEXT("Cannot return a running task to the pool"));
+		return;
+	}
+
+	// 안전하게 초기화 후 반환
+	FScopeLock Lock(&TaskPoolLock);
+	Task->Init();
+	Task->SetReturnedToPool(true);
+	AcquireItemTaskPool.Enqueue(Task);
+#endif
+}
+
+
+void AMultiGameMode::ReturnTaskToPool(FTUseItemTask* Task)
+{
+#ifdef UE_SERVER
+	if (!Task)
+	{
+		TESTLOG(Error, TEXT("Attempting to return null task to pool"));
+		return;
+	}
+
+	// 이미 풀에 반환된 태스크를 다시 반환하지 않도록 함
+	if (Task->IsReturnedToPool())
+	{
+		TESTLOG(Warning, TEXT("Task already returned to pool"));
+		return;
+	}
+
+	// 실행 중인 상태에서는 반환하지 않음
+	if (Task->IsTaskRunning())
+	{
+		TESTLOG(Warning, TEXT("Cannot return a running task to the pool"));
+		return;
+	}
+
+	// 안전하게 초기화 후 반환
+	FScopeLock Lock(&TaskPoolLock);
+	Task->Init();
+	Task->SetReturnedToPool(true);
+	UseItemTaskPool.Enqueue(Task);
 #endif
 }
