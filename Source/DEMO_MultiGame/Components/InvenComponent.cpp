@@ -5,7 +5,7 @@
 #include "Characters/PlayerCharacter.h"
 #include "Tasks/TAcquireItemTask.h"
 #include "DEMO_MultiGame.h"
-
+#include "Tasks/TUserItemTask.h"
 
 
 UInvenComponent::UInvenComponent() : OwnerCharacter(nullptr), GameMode(nullptr)
@@ -35,8 +35,12 @@ void UInvenComponent::BeginPlay()
 		TESTLOG(Warning, TEXT("InvenComponent not attached to PlayerCharacter"));
 		return;
 	}
-	
-	GameMode = Cast<AMultiGameMode>(GetWorld()->GetAuthGameMode());
+}
+
+void UInvenComponent::InitializeGameMode(AMultiGameMode* InGameMode)
+{
+	GameMode = InGameMode;
+
 	if (!GameMode)
 	{
 		TESTLOG(Warning, TEXT("Failed to get MultiGameMode"));
@@ -48,7 +52,7 @@ void UInvenComponent::BeginPlay()
 void UInvenComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(UInvenComponent, ItemList);
+	//DOREPLIFETIME(UInvenComponent, ItemList);
 }
 
 
@@ -77,13 +81,6 @@ void UInvenComponent::Server_AcquireItem_Implementation()
 #ifdef UE_SERVER
 	if (!OwnerCharacter)
 	{
-		TESTLOG(Warning, TEXT("Checksum verification failed for player %s"), *GetName());
-		return;
-	}
-    
-
-	if (IsValid(OwnerCharacter))
-	{
 		TESTLOG(Error, TEXT("Invalid ThreadPool or Player"));
 		return;
 	}
@@ -95,6 +92,8 @@ void UInvenComponent::Server_AcquireItem_Implementation()
 		TESTLOG(Error, TEXT("Failed to get or create attack task"));
 		return;
 	}
+
+	Task->InitializeAcquireItem(OwnerCharacter);
 	
 	OwnerCharacter->GetGameMode()->ExecuteAcquireItemTask(Task);
 
@@ -126,6 +125,8 @@ void UInvenComponent::Server_UseItem_Implementation(const int32 UseItemID)
 		TESTLOG(Error, TEXT("Failed to get or create attack task"));
 		return;
 	}
+
+	Task->InitializeItemUsage(OwnerCharacter, UseItemID);
 	
 	OwnerCharacter->GetGameMode()->ExecuteUseItemTask(Task);
 
@@ -147,6 +148,8 @@ void UInvenComponent::Client_UseItem(const int32 ItemID)
 void UInvenComponent::Multicast_AddItemToList_Implementation(FItemData NewItem)
 {
 	ItemList.Add(NewItem);
+
+	TESTLOG(Warning, TEXT("Item Num: %d"), ItemList.Num());
 }
 
 

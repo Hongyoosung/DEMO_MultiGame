@@ -5,6 +5,7 @@
 #include "Components/ActorComponent.h"
 #include "AntiCheatComponent.generated.h"
 
+
 class APlayerCharacter;
 class UAntiCheatManager;
 class AMultiGameMode;
@@ -48,6 +49,8 @@ class DEMO_MULTIGAME_API UAntiCheatComponent : public UActorComponent
 public:
 	UAntiCheatComponent();
 
+	void InitializeGameMode(AMultiGameMode* InGameMode);
+	
 	FPlayerChecksum GetChecksums() const { return Checksums; }
 
 	void UpdateAllChecksums();

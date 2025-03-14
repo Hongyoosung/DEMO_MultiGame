@@ -6,10 +6,9 @@
 
 void FTAcquireItemTask::InitializeAcquireItem(APlayerCharacter* InPlayer)
 {
-#ifdef UE_SERVER
 	PlayerWeak = InPlayer;
-#endif
 }
+
 
 void FTAcquireItemTask::DoThreadedWork()
 {

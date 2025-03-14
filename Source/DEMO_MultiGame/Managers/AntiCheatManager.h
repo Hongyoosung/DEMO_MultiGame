@@ -29,6 +29,7 @@ private:
 	uint32 CalculateHealthChecksum		(const float Health)		const;
 	uint32 CalculatePositionChecksum	(const FVector& Position)	const;
 
+private:
 	UPROPERTY(EditDefaultsOnly, Category = "AntiCheat")
 	float MaxAllowedSpeed;
 	

@@ -10,19 +10,18 @@
 #include "GameModes/MultiGameMode.h"
 #include "Tables/ItemData.h"
 #include "Compression/CompressedBuffer.h"
-
-
+#include "Kismet/GameplayStatics.h"
 
 
 APlayerCharacter::APlayerCharacter()
     : GameMode(nullptr)
     , AttackRange(300.0f)
 {
-
     // Create components
     HealthComponent     =   CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
     UIComponent         =   CreateDefaultSubobject<UPlayerUIComponent>(TEXT("UIComponent"));
     AntiCheatComponent  =   CreateDefaultSubobject<UAntiCheatComponent>(TEXT("AntiCheatComponent"));
+    InvenComponent      =   CreateDefaultSubobject<UInvenComponent>(TEXT("InvenComponent"));
 }
 
 
@@ -46,33 +45,23 @@ void APlayerCharacter::InitializeManagers()
 }
 
 
-bool APlayerCharacter::AttackVerification(const APlayerCharacter* Player) const
-{
-    return GameMode->GetAntiCheatManager()->VerifyAllChecksums(Player);
-}
-
-
 void APlayerCharacter::BeginPlay()
 {
     Super::BeginPlay();
     
-    FPlatformProcess::Sleep(0.2f);
-    
-    // Initialize GameMode
-    GameMode = Cast<AMultiGameMode>(GetWorld()->GetAuthGameMode());
-    if (!GameMode)
+    // 서버에서만 GameMode 초기화
+    if (HasAuthority()) // 서버에서만 실행
     {
-        TESTLOG(Warning, TEXT("Failed to get GameMode"));
-        return;
-    }
-
-    FPlatformProcess::Sleep(0.2f);
-
-    if (!GameMode->HasActorBegunPlay())
-    {
-        TESTLOG(Warning, TEXT("GameMode has not begun play yet. Delaying AntiCheatManager initialization."));
-        GetWorld()->GetTimerManager().SetTimerForNextTick(this, &APlayerCharacter::InitializeManagers);
-        return;
+        if (AMultiGameMode* GM = Cast<AMultiGameMode>(UGameplayStatics::GetGameMode(this)))
+        {
+            GameMode = GM;
+            AntiCheatComponent->InitializeGameMode(GM);
+            InvenComponent->InitializeGameMode(GM);
+        }
+        else
+        {
+            TESTLOG(Error, TEXT("Failed to get GameMode on server"));
+        }
     }
 }
 
@@ -86,7 +75,7 @@ void APlayerCharacter::Tick(float DeltaTime)
 
     if (AccumulatedTime >= 0.2f)
     {
-        AntiCheatComponent->UpdateAllChecksums();
+        //AntiCheatComponent->UpdateAllChecksums();
         
         AccumulatedTime = 0.0f;
     }
@@ -110,6 +99,12 @@ void APlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 }
 
 
+bool APlayerCharacter::AttackVerification(const APlayerCharacter* Player) const
+{
+    return GameMode->GetAntiCheatManager()->VerifyAllChecksums(this);
+}
+
+
 bool APlayerCharacter::ItemVerification(const APlayerCharacter* Player, const int32 ItemID) const
 {
     return AntiCheatManager->VerifyItemUsage(Player, ItemID);
@@ -129,14 +124,20 @@ void APlayerCharacter::UseItem()
 {
     TArray<int32> ItemIDs;
 
-    for (auto& Item : InvenComponent->GetItemDataList())
+    for (const auto& Item : InvenComponent->GetItemDataList())
     {
         ItemIDs.Add(Item.ItemID);
     }
 
-    const int32 ItemID = ItemIDs[FMath::RandRange(0, ItemIDs.Num() - 1)];
-
-    InvenComponent->UseItem(ItemID);
+    if (ItemIDs.Num() > 0)
+    {
+        const int32 ItemID = ItemIDs[FMath::RandRange(0, ItemIDs.Num() - 1)];
+        InvenComponent->UseItem(ItemID);
+    }
+    else
+    {
+        TESTLOG(Warning, TEXT("No items in inventory to use"));
+    }
 }
 
 

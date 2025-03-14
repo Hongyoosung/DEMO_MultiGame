@@ -69,7 +69,7 @@ private:
 private:
     // Game references
     UPROPERTY()
-    AMultiGameMode*         GameMode;
+    AMultiGameMode*        GameMode;
     
     UPROPERTY()
     UAntiCheatManager*      AntiCheatManager;

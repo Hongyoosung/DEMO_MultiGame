@@ -1,5 +1,5 @@
-﻿#include "DEMO_MultiGame.h"
-#include "AntiCheatComponent.h"
+﻿#include "AntiCheatComponent.h"
+#include "DEMO_MultiGame.h"
 #include "HealthComponent.h"
 #include "Characters/PlayerCharacter.h"
 #include "GameModes/MultiGameMode.h"
@@ -40,8 +40,13 @@ void UAntiCheatComponent::BeginPlay()
         TESTLOG(Error, TEXT("AntiCheatComponent not attached to PlayerCharacter"));
         return;
     }
+    
+}
 
-    GameMode = Cast<AMultiGameMode>(OwnerCharacter->GetWorld()->GetAuthGameMode());
+void UAntiCheatComponent::InitializeGameMode(AMultiGameMode* InGameMode)
+{
+    GameMode = InGameMode;
+    
     if (!GameMode)
     {
         TESTLOG(Error, TEXT("Failed to get MultiGameMode"));

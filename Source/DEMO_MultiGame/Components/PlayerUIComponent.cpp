@@ -104,7 +104,7 @@ void UPlayerUIComponent::InitializeHealthWidget()
 void UPlayerUIComponent::UpdateHealthUI(const float HealthPercent)
 {
 //#ifndef UE_SERVER
-    TESTLOG(Warning, TEXT("UpdateHealthUI: %f"), HealthPercent);
+    //TESTLOG(Warning, TEXT("UpdateHealthUI: %f"), HealthPercent);
     if (!HealthBarWidget)
     {
         return;

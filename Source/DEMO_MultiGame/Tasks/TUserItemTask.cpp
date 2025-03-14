@@ -5,10 +5,8 @@
 
 void FTUseItemTask::InitializeItemUsage(APlayerCharacter* InPlayer, int32 InItemID)
 {
-#ifdef UE_SERVER
 	PlayerWeak	= InPlayer;
 	ItemID		= InItemID;
-#endif
 }
 
 

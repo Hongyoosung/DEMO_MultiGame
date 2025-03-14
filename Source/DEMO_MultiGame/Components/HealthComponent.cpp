@@ -9,6 +9,7 @@
 #include "Tasks/TAttackTask.h"
 #include "NiagaraFunctionLibrary.h"
 
+
 UHealthComponent::UHealthComponent()
 	: Health(100.0f)
 	, MaxHealth(100.0f)
@@ -33,6 +34,11 @@ void UHealthComponent::BeginPlay()
 	{
 		UE_LOG(LogTemp, Error, TEXT("HealthComponent not attached to PlayerCharacter"));
 	}
+}
+
+void UHealthComponent::InitializeGameState()
+{
+	
 }
 
 
@@ -132,14 +138,13 @@ void UHealthComponent::Server_Attack_Implementation()
 {
 #ifdef UE_SERVER
 	// Verify checksums
-	if (!OwnerCharacter->AttackVerification(OwnerCharacter))
+	/*if (!OwnerCharacter->AttackVerification(OwnerCharacter))
 	{
-		TESTLOG(Warning, TEXT("Checksum verification failed for player %s"), *GetName());
 		return;
-	}
+	}*/
     
 
-	if (IsValid(OwnerCharacter))
+	if (!OwnerCharacter)
 	{
 		TESTLOG(Error, TEXT("Invalid ThreadPool or Player"));
 		return;
@@ -158,15 +163,3 @@ void UHealthComponent::Server_Attack_Implementation()
 	OwnerCharacter->GetGameMode()->ExecuteAttackTask(Task);
 #endif
 }
-
-
-
-
-
-
-
-
-
-
-
-

@@ -47,8 +47,8 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void InitializeGameState();
 
-	
 private:
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_SpawnHitEffect(const FVector Location);

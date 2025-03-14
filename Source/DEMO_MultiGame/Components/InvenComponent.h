@@ -23,6 +23,9 @@ public:
 	void AcquireItem();
 	void UseItem(const int32 ItemID);
 
+	void InitializeGameMode(AMultiGameMode* InGameMode);
+
+	
 protected:
 	virtual void BeginPlay() override;
 

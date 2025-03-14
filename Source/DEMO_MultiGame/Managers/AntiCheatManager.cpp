@@ -9,7 +9,7 @@
 
 
 UAntiCheatManager::UAntiCheatManager()
-	: FailedChecksumCount(0), PositionToleranceThreshold(1000.0f), MaxAllowedSpeed(600.0f)
+	: MaxAllowedSpeed(600.0f), PositionToleranceThreshold(1000.0f), FailedChecksumCount(0)
 {
 }
 
@@ -78,7 +78,7 @@ bool UAntiCheatManager::VerifyHealthChecksum(const APlayerCharacter* Player) con
 
 	// Calculate current checksum
 	const uint32 CalculatedChecksum = CalculateHealthChecksum(Player->GetHealthComponent()->GetHealth());
-
+	
 	// Get stored checksum
 	const uint32 StoredChecksum = Player->GetAntiCheatComponent()->GetChecksums().GetPositionChecksum();
 
