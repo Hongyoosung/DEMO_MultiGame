@@ -2,176 +2,158 @@
 
 #include "PlayerCharacter.h"
 #include "DEMO_MultiGame.h"
-#include "Net/UnrealNetwork.h"
 #include "Components/HealthComponent.h"
 #include "Components/PlayerUIComponent.h"
 #include "Components/AntiCheatComponent.h"
+#include "Components/InvenComponent.h"
 #include "Managers/AntiCheatManager.h"
 #include "GameModes/MultiGameMode.h"
+#include "Tables/ItemData.h"
+#include "Compression/CompressedBuffer.h"
+#include "Kismet/GameplayStatics.h"
 
-void FPlayerChecksum::UpdateHealthChecksum(const float Health)
-{
-#ifdef UE_SERVER
-    HealthChecksum = FCrc::MemCrc32(&Health, sizeof(Health));
-#endif
-}
-
-
-void FPlayerChecksum::UpdatePositionChecksum(const FVector& Position)
-{
-#ifdef UE_SERVER
-    PositionChecksum = FCrc::MemCrc32(&Position, sizeof(Position));
-#endif
-}
 
 APlayerCharacter::APlayerCharacter()
-    : HitEffect(nullptr)
-    , GameMode(nullptr)
+    : GameMode(nullptr)
     , AttackRange(300.0f)
-    , ChecksumUpdateInterval(1.0f)
-    , TimeSinceLastChecksumUpdate(0.0f)
 {
-    // Create health component
-    HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
-    
-    // Create UI component
-    UIComponent = CreateDefaultSubobject<UPlayerUIComponent>(TEXT("UIComponent"));
-    
-    // Create anti-cheat component
-    AntiCheatComponent = CreateDefaultSubobject<UAntiCheatComponent>(TEXT("AntiCheatComponent"));
+    // Create components
+    HealthComponent     =   CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
+    UIComponent         =   CreateDefaultSubobject<UPlayerUIComponent>(TEXT("UIComponent"));
+    AntiCheatComponent  =   CreateDefaultSubobject<UAntiCheatComponent>(TEXT("AntiCheatComponent"));
+    InvenComponent      =   CreateDefaultSubobject<UInvenComponent>(TEXT("InvenComponent"));
 
-#ifdef UE_SERVER
-    // Initialize checksums
-    UpdateAllChecksums();
-#endif
+    
+    bReplicates = true;
 }
 
-void APlayerCharacter::BeginPlay()
+
+void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
-    Super::BeginPlay();
-    
-    FPlatformProcess::Sleep(0.2f);
-    
-    // Initialize GameMode
-    GameMode = Cast<AMultiGameMode>(GetWorld()->GetAuthGameMode());
-    if (!GameMode)
-    {
-        TESTLOG(Warning, TEXT("Failed to get GameMode"));
-    }
-    
-    // Checksums are initialized in AntiCheatComponent
+    Super::SetupPlayerInputComponent(PlayerInputComponent);
+    PlayerInputComponent->BindAction("Attack",      IE_Pressed, this, &APlayerCharacter::Attack);
+    PlayerInputComponent->BindAction("AcquireItem", IE_Pressed, this, &APlayerCharacter::AcquireItem); 
+    PlayerInputComponent->BindAction("UseItem",     IE_Pressed, this, &APlayerCharacter::UseItem); 
 }
 
-void APlayerCharacter::Tick(float DeltaTime)
+void APlayerCharacter::InitializeManagers()
 {
-    Super::Tick(DeltaTime);
-
-#ifdef UE_SERVER
-    // Delegate checksum updates to the AntiCheatComponent
-    
-    if (HasAuthority() && AntiCheatComponent)
-    {
-        AntiCheatComponent->TickChecksumUpdate(DeltaTime);
-    }
-#endif
-}
-
-void APlayerCharacter::TakeDamage(const float Damage)
-{
-#ifdef UE_SERVER
-    if (HasAuthority() && HealthComponent)
-    {
-        const float NewHealth = FMath::Max(0.0f, HealthComponent->GetHealth() - Damage);
-        HealthComponent->SetHealth(NewHealth);
-        Multicast_SpawnHitEffect(GetActorLocation());
-    }
-#endif
-}
-
-bool APlayerCharacter::Server_Attack_Validate()
-{
-#ifdef UE_SERVER
-    if (!GameMode || !GameMode->GetAntiCheatManager())
-    {
-        TESTLOG(Warning, TEXT("Failed to get GameMode or AntiCheatManager"));
-        return false;
-    }
-
-
-    return GameMode->GetAntiCheatManager()->VerifyPlayerValid(this);
-#else
-    return true;
-#endif
-}
-
-void APlayerCharacter::Server_Attack_Implementation()
-{
-#ifdef UE_SERVER
-    if (!GameMode)
-    {
-        TESTLOG(Warning, TEXT("Failed to get GameMode"));
-        return;
-    }
-
+    // Initialize AntiCheatManager
     AntiCheatManager = GameMode->GetAntiCheatManager();
     if (!AntiCheatManager)
     {
         TESTLOG(Warning, TEXT("Failed to get AntiCheatManager"));
         return;
     }
+}
+
+
+void APlayerCharacter::BeginPlay()
+{
+    Super::BeginPlay();
     
-    // Verify checksums
-    if (!AntiCheatManager->VerifyAllChecksums(this) ||
-        !AntiCheatManager->VerifyPositionChecksum(this))
+    // 서버에서만 GameMode 초기화
+    if (HasAuthority()) // 서버에서만 실행
     {
-        TESTLOG(Warning, TEXT("Checksum verification failed for player %s"), *GetName());
-        return;
+        if (AMultiGameMode* GM = Cast<AMultiGameMode>(UGameplayStatics::GetGameMode(this)))
+        {
+            GameMode = GM;
+            AntiCheatComponent->InitializeGameMode(GM);
+            InvenComponent->InitializeGameMode(GM);
+        }
+        else
+        {
+            TESTLOG(Error, TEXT("Failed to get GameMode on server"));
+        }
     }
+}
+
+
+void APlayerCharacter::Tick(float DeltaTime)
+{
+    Super::Tick(DeltaTime);
     
-    // Register attack task in thread pool
-    GameMode->ExecuteAttackTask(this);
+    static float AccumulatedTime = 0.0f;
+    AccumulatedTime += DeltaTime;
+
+    if (AccumulatedTime >= 0.2f)
+    {
+        //AntiCheatComponent->UpdateAllChecksums();
+        
+        AccumulatedTime = 0.0f;
+    }
+}
+
+
+void APlayerCharacter::TakeDamage(const float Damage) const
+{
+#ifdef UE_SERVER
+    if (HealthComponent)
+    {
+        HealthComponent->TakeDamage(Damage);
+    }
 #endif
 }
+
 
 void APlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-    // Health is now replicated in HealthComponent
 }
 
-void APlayerCharacter::Multicast_SpawnHitEffect_Implementation(const FVector Location)
+
+bool APlayerCharacter::AttackVerification(const APlayerCharacter* Player) const
 {
-//#ifndef UE_SERVER
-    // RPC to display the effect at the targeted player's location
-    if (!HitEffect)
+    return GameMode->GetAntiCheatManager()->VerifyAllChecksums(this);
+}
+
+
+bool APlayerCharacter::ItemVerification(const APlayerCharacter* Player, const int32 ItemID) const
+{
+    return AntiCheatManager->VerifyItemUsage(Player, ItemID);
+}
+
+bool APlayerCharacter::PlayerVerification(const APlayerCharacter* Player) const
+{
+    return AntiCheatManager->VerifyPlayerValid(Player);
+}
+
+void APlayerCharacter::Attack() 
+{
+    HealthComponent->Attack();
+}
+
+void APlayerCharacter::UseItem()
+{
+    TESTLOG(Display, TEXT("UseItem called - InvenComponent Address: %p"), InvenComponent);
+    
+    TArray<int32> ItemIDs;
+
+    // 아이템 목록에서 사용 가능한 아이템 ID 수집
+    for (const auto& Item : InvenComponent->GetItemList())
     {
-        TESTLOG(Error, TEXT("HitEffect not set"));
-        return;
+        ItemIDs.Add(Item.ItemID);
     }
 
-    UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), HitEffect, Location);
-//#endif
-}
-
-void APlayerCharacter::UpdateAllChecksums()
-{
-#ifdef UE_SERVER
-    Checksums.SetLastChecksumPosition(GetActorLocation());
-    if (HealthComponent)
+    if (ItemIDs.Num() > 0)
     {
-        Checksums.UpdateHealthChecksum(HealthComponent->GetHealth());
+        // 랜덤 아이템 선택
+        const int32 ItemID = ItemIDs[FMath::RandRange(0, ItemIDs.Num() - 1)];
+        TESTLOG(Display, TEXT("Using item with ID: %d"), ItemID);
+        
+        // 아이템 사용 함수 호출
+        InvenComponent->RequestUseItem(ItemID);
     }
-    Checksums.UpdatePositionChecksum(Checksums.GetLastChecksumPosition());
-#endif
+    else
+    {
+        TESTLOG(Warning, TEXT("No items in inventory to use"));
+    }
 }
 
-void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
-    Super::SetupPlayerInputComponent(PlayerInputComponent);
-    PlayerInputComponent->BindAction("Attack", IE_Pressed, this, &APlayerCharacter::Client_Attack);
-}
 
-void APlayerCharacter::Client_Attack()
+void APlayerCharacter::AcquireItem()
 {
-    Server_Attack();
+    TESTLOG(Display, TEXT("AcquireItem called - InvenComponent Address: %p"), InvenComponent);
+    
+    InvenComponent->RequestAcquireItem();
 }

@@ -3,10 +3,13 @@
 #include "Misc/Crc.h"
 #include "DEMO_MultiGame.h"
 #include "Components/HealthComponent.h"
+#include "Components/AntiCheatComponent.h"
+#include "Components/InvenComponent.h"
+#include "Tables/ItemData.h"
 
 
 UAntiCheatManager::UAntiCheatManager()
-	: FailedChecksumCount(0), PositionToleranceThreshold(1000.0f), MaxAllowedSpeed(600.0f)
+	: MaxAllowedSpeed(600.0f), PositionToleranceThreshold(1000.0f), FailedChecksumCount(0)
 {
 }
 
@@ -20,37 +23,10 @@ UAntiCheatManager::~UAntiCheatManager()
 }
 
 
-bool UAntiCheatManager::VerifyPositionWithTolerance(const APlayerCharacter* Player) const
-{
-#ifdef UE_SERVER
-	const FVector CurrentPosition = Player->GetActorLocation();
-	const FVector LastChecksumPosition = Player->GetChecksums().GetLastChecksumPosition();
-    
-	// Calculate the distance between the current location and the last checksum location
-	const float Distance = FVector::Dist(CurrentPosition, LastChecksumPosition);
-    
-	// Verify that the distance is within an acceptable range
-	if (Distance <= PositionToleranceThreshold)
-	{
-		return true;
-	}
-    
-	// Distances that exceed the allowable range are considered checksum failures
-	TESTLOG(Warning, TEXT("VerifyPositionWithTolerance: Position difference too large (%.2f) for Player %s"), 
-		Distance, *Player->GetName());
-	
-	const_cast<UAntiCheatManager*>(this)->FailedChecksumCount++;
-	
-	return false;
-#else
-	return true;
-#endif
-}
-
-
 bool UAntiCheatManager::VerifyAttackRange(const APlayerCharacter* Attacker, const APlayerCharacter* Target, const float MaxRange) const
 {
 #ifdef UE_SERVER
+	
 	if (!Attacker || !Target) 
 	{
 		return false;
@@ -64,6 +40,7 @@ bool UAntiCheatManager::VerifyAttackRange(const APlayerCharacter* Attacker, cons
 	}
 
 	return true;
+	
 #else
 	return true;
 #endif
@@ -103,17 +80,21 @@ bool UAntiCheatManager::VerifyHealthChecksum(const APlayerCharacter* Player) con
 	const uint32 CalculatedChecksum = CalculateHealthChecksum(Player->GetHealthComponent()->GetHealth());
 	
 	// Get stored checksum
-	const uint32 StoredChecksum = Player->GetChecksums().GetHealthChecksum();
+	const uint32 StoredChecksum = Player->GetAntiCheatComponent()->GetChecksums().GetPositionChecksum();
 
+	
 	TESTLOG(Log, TEXT("VerifyHealthChecksum: Player=%s, Health=%.2f, CalculatedChecksum=%u, StoredChecksum=%u"),
 		*Player->GetName(), Player->GetHealthComponent()->GetHealth(), CalculatedChecksum, StoredChecksum);
 
+	
 	const bool bIsValid = (StoredChecksum == CalculatedChecksum);
 
 	if (!bIsValid)
 	{
 		TESTLOG(Warning, TEXT("VerifyHealthChecksum: Checksum mismatch for Player %s"), *Player->GetName());
-		const_cast<UAntiCheatManager*>(this)->FailedChecksumCount++;
+		FPlatformAtomics::InterlockedIncrement(&FailedChecksumCount);
+
+		FailedChecksumCount++;
 	}
 
 	return bIsValid;
@@ -132,25 +113,36 @@ bool UAntiCheatManager::VerifyPositionChecksum(const APlayerCharacter* Player) c
 		return false;
 	}
 
-
-	// Check Player is Moving
-	if (Player->GetVelocity().SizeSquared() > 0.0f)
+	
+	const	uint32			CurrentChecksum		= CalculatePositionChecksum(Player->GetActorLocation());
+	const	uint32			StoredChecksums		= Player->GetAntiCheatComponent()->GetChecksums().GetPositionChecksum();
+	
+	// if the checksums match, return true
+	if (CurrentChecksum == StoredChecksums)
 	{
-		// If player is moving, verify with tolerance
-		return VerifyPositionWithTolerance(Player);
+		return true;
 	}
 
-	// if player is not moving, verify exact position
-	const FVector Position = Player->GetActorLocation();
-	const uint32 CalculatedChecksum = CalculatePositionChecksum(Position);
-	const uint32 StoredChecksum = Player->GetChecksums().GetPositionChecksum();
+	// if not, check the real distance
+	const			FVector	CurrentPosition		= Player->GetActorLocation();
+	const			FVector	StoredPosition		= Player->GetAntiCheatComponent()->GetChecksums().GetLastChecksumPosition();
+	
+	const			float	Distance			= FVector::Dist(CurrentPosition, StoredPosition);
+	constexpr		float	Threshold			= 300.0f; 
 
-	const bool bIsValid = (StoredChecksum == CalculatedChecksum);
+	
+	const bool bIsValid = (Distance <= Threshold);
 
 	if (!bIsValid)
 	{
-		TESTLOG(Warning, TEXT("VerifyPositionChecksum: Checksum mismatch for Player %s"), *Player->GetName());
+		TESTLOG(Warning, TEXT("VerifyPositionChecksum: Checksum mismatch for Player %s. Distance: %f (Threshold: %f)"),
+				*Player->GetName(), Distance, Threshold);
 		const_cast<UAntiCheatManager*>(this)->FailedChecksumCount++;
+	}
+	else
+	{
+		TESTLOG(Log, TEXT("VerifyPositionChecksum: Checksum mismatch but within threshold for Player %s. Distance: %f"),
+				*Player->GetName(), Distance);
 	}
 
 	return bIsValid;
@@ -169,6 +161,7 @@ bool UAntiCheatManager::VerifyPlayerValid(const APlayerCharacter* Player) const
 #endif
 }
 
+
 bool UAntiCheatManager::VerifyAllChecksums(const APlayerCharacter* Player) const
 {
 #ifdef UE_SERVER
@@ -176,5 +169,26 @@ bool UAntiCheatManager::VerifyAllChecksums(const APlayerCharacter* Player) const
 	return VerifyHealthChecksum(Player) && VerifyPositionChecksum(Player);
 #else
 	return true;
+#endif
+}
+
+
+bool UAntiCheatManager::VerifyItemUsage(const APlayerCharacter* Player, int32 ItemID) const
+{
+#ifdef UE_SERVER
+	if (!Player || !Player->IsValidLowLevel())
+	{
+		return false;
+	}
+
+	for (const FItemData& Item : Player->GetInvenComponent()->GetItemList())
+	{
+		if (Item.ItemID == ItemID)
+		{
+			return true;
+		}
+	}
+	TESTLOG(Warning, TEXT("Item %d not found in player's inventory"), ItemID);
+	return false;
 #endif
 }

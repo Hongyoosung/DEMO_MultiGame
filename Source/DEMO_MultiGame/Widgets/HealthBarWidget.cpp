@@ -14,7 +14,6 @@ void UHealthBarWidget::UpdateHealthBar(float HealthPercentage)
 //#ifndef UE_SERVER
 	if (HealthBar)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("HealthBarWidget::UpdateHealthBar ::::::::::: %f"), HealthPercentage);
 		HealthBar->SetPercent(HealthPercentage);
 	}
 //#endif

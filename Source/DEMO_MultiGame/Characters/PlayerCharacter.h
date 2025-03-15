@@ -4,7 +4,6 @@
 
 #include "CoreMinimal.h"
 #include "DEMO_MultiGameCharacter.h"
-#include "NiagaraFunctionLibrary.h"
 #include "PlayerCharacter.generated.h"
 
 // Forward declarations
@@ -13,45 +12,11 @@ class UAntiCheatManager;
 class UHealthComponent;
 class UPlayerUIComponent;
 class UAntiCheatComponent;
+class UInvenComponent;
 
-/**
- * Struct for player security checksums
- */
-USTRUCT()
-struct FPlayerChecksum
-{
-    GENERATED_BODY()
-public:
-    FPlayerChecksum() : HealthChecksum(0), PositionChecksum(0), LastChecksumPosition(FVector3d(0, 0, 0)) {}
+struct FItemData;
 
-    // Getters
-    uint32  GetHealthChecksum() const { return HealthChecksum; }
-    uint32  GetPositionChecksum() const { return PositionChecksum; }
-    FVector GetLastChecksumPosition() const { return LastChecksumPosition; }
 
-    // Setters
-    void SetHealthChecksum(const uint32 Checksum) { HealthChecksum = Checksum; }
-    void SetPositionChecksum(const uint32 Checksum) { PositionChecksum = Checksum; }
-    void SetLastChecksumPosition(const FVector& Position) { LastChecksumPosition = Position; }
-    
-    // Update methods
-    void UpdateHealthChecksum(const float Health);
-    void UpdatePositionChecksum(const FVector& Position);
-
-private:
-    UPROPERTY()
-    uint32 HealthChecksum;
-
-    UPROPERTY()
-    uint32 PositionChecksum;
-
-    UPROPERTY()
-    FVector LastChecksumPosition;
-};
-
-/**
- * Character class for players with health, UI, and anti-cheat functionality
- */
 UCLASS()
 class DEMO_MULTIGAME_API APlayerCharacter : public ADEMO_MultiGameCharacter
 {
@@ -63,73 +28,73 @@ public:
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
     virtual void Tick(float DeltaTime) override;
 
-    // Spawn Hit Effect
-    UFUNCTION(NetMulticast, Unreliable)
-    void Multicast_SpawnHitEffect(const FVector Location);
-
+    
     // Take damage function
     UFUNCTION()
-    void TakeDamage(float Damage);
+    void TakeDamage(float Damage) const;
+    
+    
+    // Getter
+    FORCEINLINE AMultiGameMode*         GetGameMode             ()      const   {       return GameMode;            }
+    FORCEINLINE UAntiCheatComponent*    GetAntiCheatComponent   ()      const   {       return AntiCheatComponent;  }
+    FORCEINLINE UHealthComponent*       GetHealthComponent      ()      const   {       return HealthComponent;     }
+    FORCEINLINE UInvenComponent*        GetInvenComponent       ()      const   {       return InvenComponent;      }
+    FORCEINLINE UPlayerUIComponent*     GetUIComponent          ()      const   {       return UIComponent;         }
+    FORCEINLINE float                   GetAttackRange          ()      const   {       return AttackRange;         }
 
-    // Checksum access for verification
-    const FPlayerChecksum& GetChecksums() const { return Checksums; }
-
-    // Attack range getter
-    float GetAttackRange() const { return AttackRange; }
-
-    UHealthComponent* GetHealthComponent() const { return HealthComponent; }
     
 protected:
     virtual void BeginPlay() override;
     virtual void SetupPlayerInputComponent(class UInputComponent* InputComponent) override;
     
 private:
-    // Attack RPCs
-    UFUNCTION(Server, Reliable, WithValidation)
-    void Server_Attack();
-    void Client_Attack();
+    void InitializeManagers();
+    
+    // Task functions
+    UFUNCTION()
+    void Attack();
 
-    // Update all security checksums
-    void UpdateAllChecksums();
+    UFUNCTION()
+    void UseItem();
+    
+    UFUNCTION()
+    void AcquireItem();
 
-public:
-    // Effects
-    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Effects")
-    UNiagaraSystem* HitEffect;
+    // Verification methods
+    bool AttackVerification (const APlayerCharacter* Player)                        const;
+    bool ItemVerification   (const APlayerCharacter* Player, const int32 ItemID)    const;
+    bool PlayerVerification (const APlayerCharacter* Player)                        const;
 
+    
 private:
     // Game references
     UPROPERTY()
-    AMultiGameMode* GameMode;
-
+    AMultiGameMode*        GameMode;
+    
     UPROPERTY()
-    UAntiCheatManager* AntiCheatManager;
-    
-    // Component references - will be created in constructor
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
-    UHealthComponent* HealthComponent;
+    UAntiCheatManager*      AntiCheatManager;
     
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
-    UPlayerUIComponent* UIComponent;
+    UHealthComponent*       HealthComponent;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
-    UAntiCheatComponent* AntiCheatComponent;
+    UInvenComponent*        InvenComponent;
+    
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+    UPlayerUIComponent*     UIComponent;
+    
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+    UAntiCheatComponent*    AntiCheatComponent;
     
     
     // Properties
     UPROPERTY()
-    float AttackRange;
+    float                   AttackRange;
     
-    UPROPERTY()
-    FPlayerChecksum Checksums;
-
-    UPROPERTY(EditDefaultsOnly, Category = "AntiCheat", meta = (AllowPrivateAccess = "true"))
-    float ChecksumUpdateInterval;
-
-    float TimeSinceLastChecksumUpdate;
 
     // Getters for components - friend classes can use these
     friend class UHealthComponent;
+    friend class UInvenComponent;
     friend class UPlayerUIComponent;
     friend class UAntiCheatComponent;
 };

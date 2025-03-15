@@ -5,8 +5,41 @@
 #include "Components/ActorComponent.h"
 #include "AntiCheatComponent.generated.h"
 
+
 class APlayerCharacter;
 class UAntiCheatManager;
+class AMultiGameMode;
+
+
+USTRUCT()
+struct FPlayerChecksum
+{
+	GENERATED_BODY()
+public:
+	FPlayerChecksum() : HealthChecksum(0), PositionChecksum(0), LastChecksumPosition(FVector3d(0, 0, 0)) {}
+
+	// Getters
+	uint32		GetHealthChecksum		()	const					{		return HealthChecksum;			}
+	uint32		GetPositionChecksum		()	const					{		return PositionChecksum;		}
+	FVector		GetLastChecksumPosition	()	const					{		return LastChecksumPosition;	}
+	
+	// Setters
+	void		SetHealthChecksum		(const uint32 Checksum)		{		HealthChecksum = Checksum;			}
+	void		SetPositionChecksum		(const uint32 Checksum)		{		PositionChecksum = Checksum;		}
+	void		SetLastChecksumPosition	(const FVector& Position)	{		LastChecksumPosition = Position;	}
+
+
+private:
+	UPROPERTY()
+	uint32 HealthChecksum;
+
+	UPROPERTY()
+	uint32 PositionChecksum;
+
+	UPROPERTY()
+	FVector LastChecksumPosition;
+};
+
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class DEMO_MULTIGAME_API UAntiCheatComponent : public UActorComponent
@@ -16,18 +49,19 @@ class DEMO_MULTIGAME_API UAntiCheatComponent : public UActorComponent
 public:
 	UAntiCheatComponent();
 
-	// 체크섬 업데이트 메서드
+	void InitializeGameMode(AMultiGameMode* InGameMode);
+	
+	FPlayerChecksum GetChecksums() const { return Checksums; }
+
 	void UpdateAllChecksums();
-    
+
 	// 액션 전 기본 검증 (로컬 검증 후 필요시 매니저에 위임)
 	bool ValidatePlayerForAction() const;
-    
-	// 체크섬 업데이트를 위한 틱 처리
-	void TickChecksumUpdate(float DeltaTime);
     
 	// 공격 범위 검증을 위한 헬퍼 메서드
 	bool IsTargetInRange(const APlayerCharacter* Target) const;
 
+	
 protected:
 	virtual void BeginPlay() override;
 
@@ -43,6 +77,12 @@ private:
     
 	UPROPERTY()
 	APlayerCharacter* OwnerCharacter;
+
+	UPROPERTY()
+	AMultiGameMode* GameMode;
+	
+	UPROPERTY()
+	FPlayerChecksum Checksums;
 };
 
 // AntiCheatManager.h - 기존 코드 유지
