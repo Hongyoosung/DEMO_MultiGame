@@ -35,12 +35,12 @@ public:
     
     
     // Getter
-    AMultiGameMode*         GetGameMode             ()      const   {       return GameMode;            }
-    UAntiCheatComponent*    GetAntiCheatComponent   ()      const   {       return AntiCheatComponent;  }
-    UHealthComponent*       GetHealthComponent      ()      const   {       return HealthComponent;     }
-    UInvenComponent*        GetInvenComponent       ()      const   {       return InvenComponent;      }
-    UPlayerUIComponent*     GetUIComponent          ()      const   {       return UIComponent;         }
-    float                   GetAttackRange          ()      const   {       return AttackRange;         }
+    FORCEINLINE AMultiGameMode*         GetGameMode             ()      const   {       return GameMode;            }
+    FORCEINLINE UAntiCheatComponent*    GetAntiCheatComponent   ()      const   {       return AntiCheatComponent;  }
+    FORCEINLINE UHealthComponent*       GetHealthComponent      ()      const   {       return HealthComponent;     }
+    FORCEINLINE UInvenComponent*        GetInvenComponent       ()      const   {       return InvenComponent;      }
+    FORCEINLINE UPlayerUIComponent*     GetUIComponent          ()      const   {       return UIComponent;         }
+    FORCEINLINE float                   GetAttackRange          ()      const   {       return AttackRange;         }
 
     
 protected:

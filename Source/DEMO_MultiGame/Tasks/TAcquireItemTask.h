@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Async/AsyncWork.h"
+#include "Tables/ItemData.h"
 #include "Tasks/PoolableQueuedWork.h"
 
 
@@ -11,7 +12,7 @@ class APlayerCharacter;
 class FTAcquireItemTask final : public FPoolableQueuedWork
 {
 public:
-	void InitializeAcquireItem(APlayerCharacter* InPlayer);
+	void InitializeAcquireItem(APlayerCharacter* InPlayer, const FItemData& InItem);
 
 	void SetCompletionCallback(TFunction<void(FTAcquireItemTask*)> InCallback)
 	{
@@ -28,5 +29,7 @@ private:
 	void FinishTask();
 
 	TWeakObjectPtr<APlayerCharacter> PlayerWeak;
+	FItemData ItemData;
+	
 	TFunction<void(FTAcquireItemTask*)> CompletionCallback;
 };

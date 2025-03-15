@@ -4,6 +4,7 @@
 #include "Async/AsyncWork.h"
 #include "Tasks/PoolableQueuedWork.h"
 
+struct FItemData;
 class APlayerCharacter;
 
 class FTUseItemTask final : public FPoolableQueuedWork
@@ -24,6 +25,7 @@ public:
 
 private:
 	void FinishTask();
+	void ApplyItemEffect(const FItemData& Item, APlayerCharacter* Player);
 
 	TWeakObjectPtr<APlayerCharacter> PlayerWeak;
 	TFunction<void(FTUseItemTask*)> CompletionCallback;

@@ -3,7 +3,7 @@
 #include "DEMO_MultiGame.h"
 #include "Tasks/TAttackTask.h"
 #include "Tasks/TAcquireItemTask.h"
-#include "Tasks/TUserItemTask.h"
+#include "Tasks/TUseItemTask.h"
 #include "ThreadPool/CustomQueuedThreadPool.h"
 #include "Managers/AntiCheatManager.h"
 #include "Net/UnrealNetwork.h"

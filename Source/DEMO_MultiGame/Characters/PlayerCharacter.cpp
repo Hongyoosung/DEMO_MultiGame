@@ -22,6 +22,9 @@ APlayerCharacter::APlayerCharacter()
     UIComponent         =   CreateDefaultSubobject<UPlayerUIComponent>(TEXT("UIComponent"));
     AntiCheatComponent  =   CreateDefaultSubobject<UAntiCheatComponent>(TEXT("AntiCheatComponent"));
     InvenComponent      =   CreateDefaultSubobject<UInvenComponent>(TEXT("InvenComponent"));
+
+    
+    bReplicates = true;
 }
 
 
@@ -122,17 +125,24 @@ void APlayerCharacter::Attack()
 
 void APlayerCharacter::UseItem()
 {
+    TESTLOG(Display, TEXT("UseItem called - InvenComponent Address: %p"), InvenComponent);
+    
     TArray<int32> ItemIDs;
 
-    for (const auto& Item : InvenComponent->GetItemDataList())
+    // 아이템 목록에서 사용 가능한 아이템 ID 수집
+    for (const auto& Item : InvenComponent->GetItemList())
     {
         ItemIDs.Add(Item.ItemID);
     }
 
     if (ItemIDs.Num() > 0)
     {
+        // 랜덤 아이템 선택
         const int32 ItemID = ItemIDs[FMath::RandRange(0, ItemIDs.Num() - 1)];
-        InvenComponent->UseItem(ItemID);
+        TESTLOG(Display, TEXT("Using item with ID: %d"), ItemID);
+        
+        // 아이템 사용 함수 호출
+        InvenComponent->RequestUseItem(ItemID);
     }
     else
     {
@@ -143,5 +153,7 @@ void APlayerCharacter::UseItem()
 
 void APlayerCharacter::AcquireItem()
 {
-    InvenComponent->AcquireItem();
+    TESTLOG(Display, TEXT("AcquireItem called - InvenComponent Address: %p"), InvenComponent);
+    
+    InvenComponent->RequestAcquireItem();
 }

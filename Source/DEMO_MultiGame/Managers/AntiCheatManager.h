@@ -38,5 +38,5 @@ private:
 	float PositionToleranceThreshold;
 
 	// For performance logging
-	int32 FailedChecksumCount;
+	mutable int32 FailedChecksumCount;
 };

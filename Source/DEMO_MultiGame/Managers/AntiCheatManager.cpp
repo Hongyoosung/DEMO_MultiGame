@@ -92,7 +92,9 @@ bool UAntiCheatManager::VerifyHealthChecksum(const APlayerCharacter* Player) con
 	if (!bIsValid)
 	{
 		TESTLOG(Warning, TEXT("VerifyHealthChecksum: Checksum mismatch for Player %s"), *Player->GetName());
-		const_cast<UAntiCheatManager*>(this)->FailedChecksumCount++;
+		FPlatformAtomics::InterlockedIncrement(&FailedChecksumCount);
+
+		FailedChecksumCount++;
 	}
 
 	return bIsValid;
@@ -179,16 +181,14 @@ bool UAntiCheatManager::VerifyItemUsage(const APlayerCharacter* Player, int32 It
 		return false;
 	}
 
-	for (const FItemData& Item : Player->GetInvenComponent()->GetItemDataList())
+	for (const FItemData& Item : Player->GetInvenComponent()->GetItemList())
 	{
 		if (Item.ItemID == ItemID)
 		{
-			return VerifyAllChecksums(Player); // 체크섬 검증 추가
+			return true;
 		}
 	}
 	TESTLOG(Warning, TEXT("Item %d not found in player's inventory"), ItemID);
 	return false;
-#else
-	return true;
 #endif
 }

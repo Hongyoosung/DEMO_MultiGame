@@ -1,12 +1,15 @@
 ﻿#include "TAcquireItemTask.h"
+
+#include "DEMO_MultiGame.h"
 #include "Characters/PlayerCharacter.h"
 #include "Components/InvenComponent.h"
 #include "Tables/ItemData.h"
 
 
-void FTAcquireItemTask::InitializeAcquireItem(APlayerCharacter* InPlayer)
+void FTAcquireItemTask::InitializeAcquireItem(APlayerCharacter* InPlayer, const FItemData& InItem)
 {
 	PlayerWeak = InPlayer;
+	ItemData = InItem;
 }
 
 
@@ -14,30 +17,37 @@ void FTAcquireItemTask::DoThreadedWork()
 {
 #ifdef UE_SERVER
 	SetTaskRunning(true);
+	
 	APlayerCharacter* Player = PlayerWeak.Get();
 	if (!Player || !Player->IsValidLowLevel())
 	{
+		TESTLOG(Error, TEXT("Invalid Player in AcquireItemTask"));
 		FinishTask();
 		return;
 	}
 
-	// 랜덤 아이템 생성
-	FItemData NewItem;
-	NewItem.ItemID					= FMath::RandRange(1, 100);
-	NewItem.ItemName				= FString::Printf(TEXT("Item %d"), NewItem.ItemID);
-	NewItem.ItemFlags.Type			= FMath::RandRange(0, 255);
-	NewItem.ItemFlags.Level			= FMath::RandRange(0, 15);
-	NewItem.ItemFlags.Enhancement	= FMath::RandRange(0, 15);
-	NewItem.ItemFlags.Durability	= FMath::RandRange(0, 1023);
-	NewItem.ItemFlags.Option		= FMath::RandRange(0, 63);
-	NewItem.ItemFlags.Reserved		= 0;
 
-	UE_LOG(LogTemp, Display, TEXT("NewItem %s"), *NewItem.ItemName);
+	UInvenComponent* InvenComponent = Player->GetInvenComponent();
+	if (!InvenComponent)
+	{
+		TESTLOG(Error, TEXT("Invalid InvenComponent in AcquireItemTask"));
+		FinishTask();
+		return;
+	}
 
-	// 플레이어의 아이템 큐에 추가
-	Player->GetInvenComponent()->GetItemDataList().Add(NewItem);
-
-	Player->GetInvenComponent()->Multicast_AddItemToList_Implementation(NewItem);
+	
+	// 멀티캐스트 호출을 게임 스레드에서 실행
+	AsyncTask(ENamedThreads::GameThread, [InvenComponent, ItemData = this->ItemData]()
+	{
+		if (InvenComponent && InvenComponent->IsValidLowLevel())
+		{
+			InvenComponent->ProcessItemAcquisition(ItemData);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("Invalid InvenComponent during AsyncTask execution."));
+		}
+	});
 
 	FinishTask();
 #endif

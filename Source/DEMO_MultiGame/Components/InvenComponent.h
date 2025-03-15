@@ -2,11 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Tables/ItemData.h"
 #include "InvenComponent.generated.h"
 
-struct FItemData;
+
 class AMultiGameMode;
 class APlayerCharacter;
+
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class DEMO_MULTIGAME_API UInvenComponent : public UActorComponent
@@ -16,38 +18,40 @@ class DEMO_MULTIGAME_API UInvenComponent : public UActorComponent
 public:
 	UInvenComponent();
 
+	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-	
-	TArray<FItemData>& GetItemDataList() { return ItemList; }
-
-	void AcquireItem();
-	void UseItem(const int32 ItemID);
 
 	void InitializeGameMode(AMultiGameMode* InGameMode);
 
 	
-protected:
-	virtual void BeginPlay() override;
+	void RequestAcquireItem();
+	void RequestUseItem(const int32 ItemID);
+
+	
+	UFUNCTION(Client, Reliable)
+	void Client_OnItemAcquired();
+	UFUNCTION(Client, Reliable)
+	void Client_OnItemUsed(int32 ItemID);
+
+
+	void ProcessItemAcquisition(const FItemData& ItemData);
+	void ProcessItemUsage(int32 ItemID);
+
+
+	FORCEINLINE const	TArray<FItemData>& GetItemList() const	{ return ItemList; }
+	FORCEINLINE			TArray<FItemData>& GetItemList()		{ return ItemList; }
 
 	
 private:
 	UFUNCTION(Server, Reliable, WithValidation)
-	void Server_AcquireItem();
-	void Client_AcquireItem();
+	void Server_RequestAcquireItem();
 
 	UFUNCTION(Server, Reliable, WithValidation)
-	void Server_UseItem(int32 ItemID);
-	void Client_UseItem(int32 ItemID);
-	
-	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_AddItemToList(FItemData NewItem);
-
-	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_RemoveItemFromList(int32 RemovedItemID);
+	void Server_RequestUseItem(int32 ItemID);
 
 	
 private:
-	UPROPERTY()
+	UPROPERTY(Replicated)
 	TArray<FItemData> ItemList;
 
 	UPROPERTY()

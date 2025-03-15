@@ -5,23 +5,12 @@
 #include "Characters/PlayerCharacter.h"
 #include "Tasks/TAcquireItemTask.h"
 #include "DEMO_MultiGame.h"
-#include "Tasks/TUserItemTask.h"
+#include "Tasks/TUseItemTask.h"
 
 
 UInvenComponent::UInvenComponent() : OwnerCharacter(nullptr), GameMode(nullptr)
 {
-}
-
-
-void UInvenComponent::AcquireItem()
-{
-	Client_AcquireItem();
-}
-
-
-void UInvenComponent::UseItem(const int32 ItemID)
-{
-	Client_UseItem(ItemID);
+	SetIsReplicatedByDefault(true);
 }
 
 
@@ -35,7 +24,11 @@ void UInvenComponent::BeginPlay()
 		TESTLOG(Warning, TEXT("InvenComponent not attached to PlayerCharacter"));
 		return;
 	}
+
+	TESTLOG(Display, TEXT("InvenComponent BeginPlay - OwnerRole: %d, RemoteRole: %d, Component Address: %p"),
+		GetOwnerRole(), GetOwner()->GetRemoteRole(), this);
 }
+
 
 void UInvenComponent::InitializeGameMode(AMultiGameMode* InGameMode)
 {
@@ -52,74 +45,165 @@ void UInvenComponent::InitializeGameMode(AMultiGameMode* InGameMode)
 void UInvenComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	//DOREPLIFETIME(UInvenComponent, ItemList);
+	DOREPLIFETIME(UInvenComponent, ItemList);
 }
 
 
-bool UInvenComponent::Server_UseItem_Validate(const int32 ItemID)
+void UInvenComponent::RequestAcquireItem()
 {
-#ifdef UE_SERVER
-	if (!OwnerCharacter || OwnerCharacter->ItemVerification(OwnerCharacter, ItemID))
+	Client_OnItemAcquired();
+}
+
+
+void UInvenComponent::RequestUseItem(const int32 ItemID)
+{
+	Client_OnItemUsed(ItemID);
+}
+
+
+void UInvenComponent::Client_OnItemAcquired_Implementation()
+{
+	Server_RequestAcquireItem();
+}
+
+
+void UInvenComponent::Client_OnItemUsed_Implementation(int32 ItemID)
+{
+	// 아이템이 클라이언트 목록에 있는지 확인
+	bool bItemExists = false;
+	for (const FItemData& Item : ItemList)
 	{
-		TESTLOG(Warning, TEXT("Failed to get GameMode or AntiCheatManager"));
+		if (Item.ItemID == ItemID)
+		{
+			bItemExists = true;
+			break;
+		}
+	}
+
+	if (bItemExists)
+	{
+		// 클라이언트에서 서버로 RPC 호출
+		Server_RequestUseItem(ItemID);
+	}
+	else
+	{
+		TESTLOG(Warning, TEXT("Client tried to use non-existent item: %d"), ItemID);
+	}
+}
+
+void UInvenComponent::ProcessItemAcquisition(const FItemData& ItemData)
+{
+	ItemList.Add(ItemData);
+	TESTLOG(Display, TEXT("Multicast_AddItemToList - Component Address: %p, Item Added: %s, Total Items: %d"), 
+		this, *ItemData.ItemName, ItemList.Num());
+}
+
+void UInvenComponent::ProcessItemUsage(int32 ItemID)
+{
+	int32 Index = -1;
+	for (int32 i = 0; i < ItemList.Num(); ++i)
+	{
+		if (ItemList[i].ItemID == ItemID)
+		{
+			Index = i;
+			break;
+		}
+	}
+
+	if (Index != -1)
+	{
+		ItemList.RemoveAt(Index);
+		TESTLOG(Display, TEXT("Multicast_RemoveItemFromList - Component Address: %p, Item Removed: %d, Total Items: %d"), 
+			this, ItemID, ItemList.Num());
+	}
+	else
+	{
+		TESTLOG(Warning, TEXT("Failed to remove item: %d, not found in list"), ItemID);
+	}
+}
+
+
+bool UInvenComponent::Server_RequestUseItem_Validate(const int32 ItemID)
+{
+	if (!OwnerCharacter)
+	{
+		TESTLOG(Warning, TEXT("Invalid OwnerCharacter in Server_UseItem_Validate"));
+		return false;
+	}
+	
+	if (!OwnerCharacter->ItemVerification(OwnerCharacter, ItemID))
+	{
+		TESTLOG(Warning, TEXT("Item verification failed for ItemID: %d"), ItemID);
 		return false;
 	}
 
 	return true;
-#endif
 }
 
 
-bool UInvenComponent::Server_AcquireItem_Validate()
+bool UInvenComponent::Server_RequestAcquireItem_Validate()
 {
+	if (!OwnerCharacter)
+	{
+		TESTLOG(Warning, TEXT("Invalid OwnerCharacter in Server_AcquireItem_Validate"));
+		return false;
+	}
+    
 	return true;
 }
 
 
-void UInvenComponent::Server_AcquireItem_Implementation()
+void UInvenComponent::Server_RequestAcquireItem_Implementation()
 {
 #ifdef UE_SERVER
-	if (!OwnerCharacter)
+	if (!OwnerCharacter || !GameMode)
 	{
-		TESTLOG(Error, TEXT("Invalid ThreadPool or Player"));
+		TESTLOG(Error, TEXT("Invalid GameMode or Player"));
 		return;
 	}
 
 	
-	FTAcquireItemTask* Task = OwnerCharacter->GetGameMode()->GetOrCreateAcquireItemTask();
+	FTAcquireItemTask* Task = GameMode->GetOrCreateAcquireItemTask();
 	if (!Task)
 	{
 		TESTLOG(Error, TEXT("Failed to get or create attack task"));
 		return;
 	}
 
-	Task->InitializeAcquireItem(OwnerCharacter);
+	// 랜덤 아이템 생성
+	FItemData NewItem;
+	NewItem.ItemID					= FMath::RandRange(1, 100);
+	NewItem.ItemName				= FString::Printf(TEXT("Item %d"), NewItem.ItemID);
+	NewItem.ItemFlags.Type			= FMath::RandRange(0, 255);
+	NewItem.ItemFlags.Level			= FMath::RandRange(0, 15);
+	NewItem.ItemFlags.Enhancement	= FMath::RandRange(0, 15);
+	NewItem.ItemFlags.Durability	= FMath::RandRange(0, 1023);
+	NewItem.ItemFlags.Option		= FMath::RandRange(0, 63);
+	NewItem.ItemFlags.Reserved		= 0;
+
+	UE_LOG(LogTemp, Display, TEXT("Created new item: %s (ID: %d, Type: %llu)"), 
+		*NewItem.ItemName, NewItem.ItemID, NewItem.ItemFlags.Type);
+		
+	Task->InitializeAcquireItem(OwnerCharacter, NewItem);
 	
-	OwnerCharacter->GetGameMode()->ExecuteAcquireItemTask(Task);
+	GameMode->ExecuteAcquireItemTask(Task);
 
 #endif
 }
 
 
-void UInvenComponent::Server_UseItem_Implementation(const int32 UseItemID)
+void UInvenComponent::Server_RequestUseItem_Implementation(const int32 UseItemID)
 {
 #ifdef UE_SERVER
 	
-	if (!OwnerCharacter)
+	if (!OwnerCharacter || !GameMode)
 	{
 		TESTLOG(Warning, TEXT("Checksum verification failed for player %s"), *GetName());
 		return;
 	}
-    
-
-	if (IsValid(OwnerCharacter))
-	{
-		TESTLOG(Error, TEXT("Invalid ThreadPool or Player"));
-		return;
-	}
 
 	
-	FTUseItemTask* Task = OwnerCharacter->GetGameMode()->GetOrCreateUseItemTask();
+	FTUseItemTask* Task = GameMode->GetOrCreateUseItemTask();
 	if (!Task)
 	{
 		TESTLOG(Error, TEXT("Failed to get or create attack task"));
@@ -127,40 +211,11 @@ void UInvenComponent::Server_UseItem_Implementation(const int32 UseItemID)
 	}
 
 	Task->InitializeItemUsage(OwnerCharacter, UseItemID);
-	
-	OwnerCharacter->GetGameMode()->ExecuteUseItemTask(Task);
+	GameMode->ExecuteUseItemTask(Task);
 
 #endif
 }
 
 
-void UInvenComponent::Client_AcquireItem()
-{
-	Server_AcquireItem();
-}
-
-void UInvenComponent::Client_UseItem(const int32 ItemID)
-{
-	Server_UseItem(ItemID);
-}
-
-
-void UInvenComponent::Multicast_AddItemToList_Implementation(FItemData NewItem)
-{
-	ItemList.Add(NewItem);
-
-	TESTLOG(Warning, TEXT("Item Num: %d"), ItemList.Num());
-}
-
-
-void UInvenComponent::Multicast_RemoveItemFromList_Implementation(int32 RemovedItemID)
-{
-	if (FItemData* Item = ItemList.FindByPredicate
-		([RemovedItemID](FItemData& Item)
-			{ return Item.ItemID == RemovedItemID; }))
-	{
-		ItemList.Remove(*Item);
-	}
-}
 
 
