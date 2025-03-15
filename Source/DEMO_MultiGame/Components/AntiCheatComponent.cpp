@@ -1,52 +1,68 @@
-﻿// AntiCheatComponent.cpp 구현
-#include "AntiCheatComponent.h"
+﻿#include "AntiCheatComponent.h"
+#include "DEMO_MultiGame.h"
+#include "HealthComponent.h"
 #include "Characters/PlayerCharacter.h"
 #include "GameModes/MultiGameMode.h"
 #include "Managers/AntiCheatManager.h"
 
+
 UAntiCheatComponent::UAntiCheatComponent()
     : ChecksumUpdateInterval(1.0f)
     , TimeSinceLastChecksumUpdate(0.0f)
-    , OwnerCharacter(nullptr)
+    , OwnerCharacter(nullptr), GameMode(nullptr)
 {
     PrimaryComponentTick.bCanEverTick = false;
 }
+
+
+void UAntiCheatComponent::UpdateAllChecksums()
+{
+    const float     Health              = OwnerCharacter->GetHealthComponent()->GetHealth();
+    const int32     HealthChecksum      = FCrc::MemCrc32(&Health, sizeof(Health));
+
+    const FVector   Position            = OwnerCharacter->GetActorLocation();
+    const int32     PositionChecksum    = FCrc::MemCrc32(&Position, sizeof(FVector));
+    
+    Checksums.SetHealthChecksum         (HealthChecksum);
+    Checksums.SetPositionChecksum       (PositionChecksum);
+    Checksums.SetLastChecksumPosition   (Position);
+}
+
 
 void UAntiCheatComponent::BeginPlay()
 {
     Super::BeginPlay();
     
-    // 소유자 참조 가져오기
     OwnerCharacter = Cast<APlayerCharacter>(GetOwner());
     if (!OwnerCharacter)
     {
-        UE_LOG(LogTemp, Error, TEXT("AntiCheatComponent not attached to PlayerCharacter"));
+        TESTLOG(Error, TEXT("AntiCheatComponent not attached to PlayerCharacter"));
         return;
     }
-    
-    // 초기 체크섬 업데이트
-    UpdateAllChecksums();
 }
 
-void UAntiCheatComponent::UpdateAllChecksums()
+
+void UAntiCheatComponent::InitializeGameMode(AMultiGameMode* InGameMode)
 {
-    if (!OwnerCharacter)
+    GameMode = InGameMode;
+    
+    if (!GameMode)
     {
+        TESTLOG(Error, TEXT("Failed to get MultiGameMode"));
         return;
     }
-    
-    // PlayerCharacter의 체크섬 업데이트 메서드 호출
-    OwnerCharacter->UpdateAllChecksums();
 }
+
 
 bool UAntiCheatComponent::ValidatePlayerForAction() const
 {
     if (!OwnerCharacter)
     {
+        TESTLOG(Error, TEXT("AntiCheatComponent not attached to PlayerCharacter"));
         return false;
     }
     
-    // 안티 치트 매니저 획득
+    // Acquire the Anti-Cheat Manager
     UAntiCheatManager* AntiCheatManager = GetAntiCheatManager();
     if (!AntiCheatManager)
     {
@@ -54,9 +70,10 @@ bool UAntiCheatComponent::ValidatePlayerForAction() const
         return false;
     }
     
-    // 플레이어 유효성 검증을 매니저에 위임
+    // Delegating player validation to a manager
     return AntiCheatManager->VerifyPlayerValid(OwnerCharacter);
 }
+
 
 UAntiCheatManager* UAntiCheatComponent::GetAntiCheatManager() const
 {
@@ -65,7 +82,6 @@ UAntiCheatManager* UAntiCheatComponent::GetAntiCheatManager() const
         return nullptr;
     }
     
-    AMultiGameMode* GameMode = Cast<AMultiGameMode>(OwnerCharacter->GetWorld()->GetAuthGameMode());
     if (!GameMode)
     {
         return nullptr;
@@ -74,15 +90,6 @@ UAntiCheatManager* UAntiCheatComponent::GetAntiCheatManager() const
     return GameMode->GetAntiCheatManager();
 }
 
-void UAntiCheatComponent::TickChecksumUpdate(float DeltaTime)
-{
-    TimeSinceLastChecksumUpdate += DeltaTime;
-    if (TimeSinceLastChecksumUpdate >= ChecksumUpdateInterval)
-    {
-        UpdateAllChecksums();
-        TimeSinceLastChecksumUpdate = 0.0f;
-    }
-}
 
 bool UAntiCheatComponent::IsTargetInRange(const APlayerCharacter* Target) const
 {
@@ -90,19 +97,19 @@ bool UAntiCheatComponent::IsTargetInRange(const APlayerCharacter* Target) const
     {
         return false;
     }
+
     
-    UAntiCheatManager* AntiCheatManager = GetAntiCheatManager();
+    const UAntiCheatManager* AntiCheatManager = GetAntiCheatManager();
     if (!AntiCheatManager)
     {
         return false;
     }
+
     
-    // 공격 범위 검증을 매니저에 위임
+    // Delegate attack scope validation to a manager
     return AntiCheatManager->VerifyAttackRange(
         OwnerCharacter, 
         Target, 
         OwnerCharacter->GetAttackRange()
     );
 }
-
-// AntiCheatManager.cpp - 기존 코드 유지

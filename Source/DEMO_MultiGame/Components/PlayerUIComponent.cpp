@@ -18,22 +18,27 @@ UPlayerUIComponent::UPlayerUIComponent()
     SetIsReplicatedByDefault(true);
 }
 
+
 void UPlayerUIComponent::BeginPlay()
 {
     Super::BeginPlay();
     
-    // Get owner reference
+
     OwnerCharacter = Cast<APlayerCharacter>(GetOwner());
     if (!OwnerCharacter)
     {
         TESTLOG(Error, TEXT("PlayerUIComponent not attached to PlayerCharacter"));
         return;
     }
+
     
+//#ifndef UE_SERVER
     // Create widget component if it doesn't exist
     if (!HealthBarWidgetComponent)
     {
-        HealthBarWidgetComponent = NewObject<UWidgetComponent>(OwnerCharacter, UWidgetComponent::StaticClass(), TEXT("HealthBar"));
+        HealthBarWidgetComponent = NewObject<UWidgetComponent>(OwnerCharacter,
+                                UWidgetComponent::StaticClass(), TEXT("HealthBar"));
+        
         HealthBarWidgetComponent->AttachToComponent(OwnerCharacter->GetMesh(), FAttachmentTransformRules::KeepRelativeTransform);
         HealthBarWidgetComponent->SetRelativeScale3D(FVector(0.1f, 0.1f, 0.1f));
         HealthBarWidgetComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 200.0f));
@@ -42,10 +47,12 @@ void UPlayerUIComponent::BeginPlay()
         HealthBarWidgetComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         HealthBarWidgetComponent->SetGenerateOverlapEvents(false);
         HealthBarWidgetComponent->SetIsReplicated(true);
+
         
         OwnerCharacter->AddInstanceComponent(HealthBarWidgetComponent);
         HealthBarWidgetComponent->RegisterComponent();
     }
+
     
     // Initialize UI
     InitializeHealthWidget();
@@ -55,16 +62,20 @@ void UPlayerUIComponent::BeginPlay()
     {
         HealthComp->OnHealthChanged.AddDynamic(this, &UPlayerUIComponent::UpdateHealthUI);
     }
+    
+//#endif
 }
+
 
 void UPlayerUIComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-    // Add any replicated properties here
 }
+
 
 void UPlayerUIComponent::InitializeHealthWidget()
 {
+//#ifndef UE_SERVER
     if (!HealthBarWidgetComponent)
     {
         TESTLOG(Error, TEXT("HealthBarWidgetComponent not set"));
@@ -76,10 +87,12 @@ void UPlayerUIComponent::InitializeHealthWidget()
         TESTLOG(Error, TEXT("HealthWidgetClass not set"));
         return;
     }
+
     
-    HealthBarWidgetComponent->SetWidgetClass(HealthWidgetClass);
-    HealthBarWidgetComponent->InitWidget();
-    HealthBarWidget = Cast<UHealthBarWidget>(HealthBarWidgetComponent->GetUserWidgetObject());
+    HealthBarWidgetComponent    ->SetWidgetClass(HealthWidgetClass);
+    HealthBarWidgetComponent    ->InitWidget();
+    HealthBarWidget             = Cast<UHealthBarWidget>(HealthBarWidgetComponent->GetUserWidgetObject());
+
     
     if (!HealthBarWidget)
     {
@@ -95,11 +108,16 @@ void UPlayerUIComponent::InitializeHealthWidget()
             UpdateHealthUI(HealthComp->GetHealth() / 100.0f);
         }
     }
+    
+//#endif
 }
+
 
 void UPlayerUIComponent::UpdateHealthUI(const float HealthPercent)
 {
+//#ifndef UE_SERVER
     TESTLOG(Warning, TEXT("UpdateHealthUI: %f"), HealthPercent);
+    
     if (!HealthBarWidget)
     {
         return;
@@ -107,6 +125,7 @@ void UPlayerUIComponent::UpdateHealthUI(const float HealthPercent)
     
     // Update Health Percent
     HealthBarWidget->UpdateHealthBar(HealthPercent);
+
     
     // Update Health Bar Color based on local control
     bool bIsLocallyControlled = false;
@@ -115,4 +134,6 @@ void UPlayerUIComponent::UpdateHealthUI(const float HealthPercent)
         bIsLocallyControlled = OwnerCharacter->IsLocallyControlled();
     }
     HealthBarWidget->UpdateHealthBarColor(bIsLocallyControlled);
+    
+//#endif
 }

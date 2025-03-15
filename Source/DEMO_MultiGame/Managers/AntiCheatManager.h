@@ -7,7 +7,7 @@
 class APlayerCharacter;
 
 UCLASS()
-class UAntiCheatManager : public UGameInstanceSubsystem
+class DEMO_MULTIGAME_API UAntiCheatManager : public UGameInstanceSubsystem
 {
 	GENERATED_BODY()
 	
@@ -17,22 +17,19 @@ public:
 	
 	// Verification methods
 	bool VerifyAttackRange				(const APlayerCharacter* Attacker, const APlayerCharacter* Target, const float MaxRange) const;
-	bool VerifyPlayerValid				(const APlayerCharacter* Player)	const;
-	bool VerifyHealthChecksum			(const APlayerCharacter* Player)	const;
-	bool VerifyPositionChecksum			(const APlayerCharacter* Player)	const;
-	bool VerifyAllChecksums				(const APlayerCharacter* Player)	const;
-
-
-private:
-	// On-the-go checksum verification mitigation logic
-	bool VerifyPositionWithTolerance(const APlayerCharacter* Player) const;
-
+	bool VerifyPlayerValid				(const APlayerCharacter* Player)				const;
+	bool VerifyHealthChecksum			(const APlayerCharacter* Player)				const;
+	bool VerifyPositionChecksum			(const APlayerCharacter* Player)				const;
+	bool VerifyAllChecksums				(const APlayerCharacter* Player)				const;
+	bool VerifyItemUsage				(const APlayerCharacter* Player, int32 ItemID)	const;
 	
+
 private:
 	// Helper methods for checksum calculation
 	uint32 CalculateHealthChecksum		(const float Health)		const;
 	uint32 CalculatePositionChecksum	(const FVector& Position)	const;
 
+private:
 	UPROPERTY(EditDefaultsOnly, Category = "AntiCheat")
 	float MaxAllowedSpeed;
 	
@@ -41,5 +38,5 @@ private:
 	float PositionToleranceThreshold;
 
 	// For performance logging
-	int32 FailedChecksumCount;
+	mutable int32 FailedChecksumCount;
 };

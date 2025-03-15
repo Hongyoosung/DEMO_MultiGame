@@ -1,4 +1,5 @@
-﻿#pragma once
+﻿// MultiGameMode.h
+#pragma once
 
 #include "CoreMinimal.h"
 #include "DEMO_MultiGameGameMode.h"
@@ -6,51 +7,66 @@
 #include "MultiGameMode.generated.h"
 
 
-class FTAttackTask;
-class APlayerCharacter;
-class UAntiCheatManager;
 class FCustomQueuedThreadPool;
+class UAntiCheatManager;
+class FTAttackTask;
+class FTAcquireItemTask;
+class FTUseItemTask;
 
 
 UCLASS(minimalapi)
 class AMultiGameMode : public ADEMO_MultiGameGameMode
 {
 	GENERATED_BODY()
-	
+
 public:
 	AMultiGameMode();
 
-	
-	virtual void BeginPlay() override;
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-	
-	
-	FCustomQueuedThreadPool*	GetThreadPool()			const	{		return ThreadPool;			}
-	UAntiCheatManager*			GetAntiCheatManager()	const	{		return AntiCheatManager;	}
+	virtual void		BeginPlay() override;
+	virtual void		EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void		GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	
-	void ExecuteAttackTask(APlayerCharacter* Player);
+	// Importing tasks from a task pool
+	FTAttackTask*		GetOrCreateAttackTask();
+	FTAcquireItemTask*	GetOrCreateAcquireItemTask();
+	FTUseItemTask*		GetOrCreateUseItemTask();
+
+
+	// Assigning tasks to a threadpool for processing
+	void				ExecuteAttackTask			(FTAttackTask* Task);
+	void				ExecuteAcquireItemTask		(FTAcquireItemTask* Task);
+	void				ExecuteUseItemTask			(FTUseItemTask* Task);
+
+	
+	// Task pool and antcheat manager getters
+	FORCEINLINE FCustomQueuedThreadPool*	GetThreadPool		()	const {		return ThreadPool;		  }
+	FORCEINLINE UAntiCheatManager*			GetAntiCheatManager	()	const {		return AntiCheatManager;  }
+	
 
 private:
-	void InitializeAttackTaskPool();
-	
-	void AdjustThreadPoolSize() const;
+	void InitializeTaskPools	();
+	void AdjustThreadPoolSize	();
+	void ReturnTaskToPool		(FTAttackTask* Task);
+	void ReturnTaskToPool		(FTAcquireItemTask* Task);
+	void ReturnTaskToPool		(FTUseItemTask* Task);
 
-	void ReturnAttackTaskToPool(FTAttackTask* Task);
 	
-	FTAttackTask* GetOrCreateAttackTask();
-
 private:
-	UPROPERTY()
+	UPROPERTY(Replicated)
 	UAntiCheatManager* AntiCheatManager;
-	
+
 	FCustomQueuedThreadPool* ThreadPool;
 	
-	TQueue<FTAttackTask*> AttackTaskPool;
-	
-	FCriticalSection AttackTaskPoolLock;
+	// Task pool lock
+	FCriticalSection TaskPoolLock;
 
 	FTimerHandle ThreadPoolAdjustmentTimer;
 
-	static constexpr int32 MAX_ATTACK_TASKS = 10;
+	// Task pools
+	TQueue<FTAttackTask*> AttackTaskPool;
+	TQueue<FTAcquireItemTask*> AcquireItemTaskPool;
+	TQueue<FTUseItemTask*> UseItemTaskPool;
+	
+	static constexpr int32 MAX_TASKS = 10;
 };
