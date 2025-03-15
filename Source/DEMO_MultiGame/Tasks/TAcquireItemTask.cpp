@@ -8,14 +8,28 @@
 
 void FTAcquireItemTask::InitializeAcquireItem(APlayerCharacter* InPlayer, const FItemData& InItem)
 {
-	PlayerWeak = InPlayer;
-	ItemData = InItem;
+	PlayerWeak	= InPlayer;
+	ItemData	= InItem;
+}
+
+
+void FTAcquireItemTask::SetCompletionCallback(TFunction<void(FTAcquireItemTask*)> InCallback)
+{
+	
+#ifdef UE_SERVER
+	
+	CompletionCallback = MoveTemp(InCallback);
+	
+#endif
+	
 }
 
 
 void FTAcquireItemTask::DoThreadedWork()
 {
+	
 #ifdef UE_SERVER
+	
 	SetTaskRunning(true);
 	
 	APlayerCharacter* Player = PlayerWeak.Get();
@@ -26,22 +40,13 @@ void FTAcquireItemTask::DoThreadedWork()
 		return;
 	}
 
-
-	UInvenComponent* InvenComponent = Player->GetInvenComponent();
-	if (!InvenComponent)
-	{
-		TESTLOG(Error, TEXT("Invalid InvenComponent in AcquireItemTask"));
-		FinishTask();
-		return;
-	}
-
 	
-	// 멀티캐스트 호출을 게임 스레드에서 실행
-	AsyncTask(ENamedThreads::GameThread, [InvenComponent, ItemData = this->ItemData]()
+	// Execute the sync call on the game thread
+	AsyncTask(ENamedThreads::GameThread, [Player, ItemData = this->ItemData]()
 	{
-		if (InvenComponent && InvenComponent->IsValidLowLevel())
+		if (Player && Player->IsValidLowLevel())
 		{
-			InvenComponent->ProcessItemAcquisition(ItemData);
+			Player->TakeAcquireItem(ItemData);
 		}
 		else
 		{
@@ -50,16 +55,22 @@ void FTAcquireItemTask::DoThreadedWork()
 	});
 
 	FinishTask();
+	
 #endif
+	
 }
 
 
 void FTAcquireItemTask::FinishTask()
 {
+	
 #ifdef UE_SERVER
+	
 	if (bIsTaskRunning)
 	{
 		bIsTaskRunning = false;
 	}
+	
 #endif
+	
 }

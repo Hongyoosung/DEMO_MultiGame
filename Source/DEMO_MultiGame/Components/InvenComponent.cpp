@@ -6,6 +6,7 @@
 #include "Tasks/TAcquireItemTask.h"
 #include "DEMO_MultiGame.h"
 #include "Tasks/TUseItemTask.h"
+#include "NiagaraFunctionLibrary.h"
 
 
 UInvenComponent::UInvenComponent() : OwnerCharacter(nullptr), GameMode(nullptr)
@@ -51,14 +52,113 @@ void UInvenComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 
 void UInvenComponent::RequestAcquireItem()
 {
+	// This behavior leads to creating a task
+	// and passing it to the server (gamemode) for processing
 	Client_OnItemAcquired();
 }
 
 
 void UInvenComponent::RequestUseItem(const int32 ItemID)
 {
+	// This behavior leads to creating a task
+	// and passing it to the server (gamemode) for processing
 	Client_OnItemUsed(ItemID);
 }
+
+
+void UInvenComponent::ProcessItemAcquisition(const FItemData& ItemData)
+{
+	
+#ifdef UE_SERVER
+	
+	if (OwnerCharacter->HasAuthority())
+	{
+		Multicast_AcquireItemEffect_Implementation(OwnerCharacter->GetActorLocation());
+	}
+
+#endif
+	
+	ItemList.Add(ItemData);
+	TESTLOG(Display, TEXT("Multicast_AddItemToList - Component Address: %p, Item Added: %s, Total Items: %d"), 
+		this, *ItemData.ItemName, ItemList.Num());
+}
+
+
+void UInvenComponent::ProcessItemUsage(const int32 ItemID)
+{
+
+#ifdef UE_SERVER
+	
+	if (OwnerCharacter->HasAuthority())
+	{
+		Multicast_UseItemEffect_Implementation(OwnerCharacter->GetActorLocation());
+	}
+
+#endif
+	
+	// Fine the item in the list and remove it
+	int32 Index = -1;
+	for (int32 i = 0; i < ItemList.Num(); ++i)
+	{
+		if (ItemList[i].ItemID == ItemID)
+		{
+			Index = i;
+			break;
+		}
+	}
+
+	// Remove the item from the list
+	if (Index != -1)
+	{
+		ItemList.RemoveAt(Index);
+		TESTLOG(Display, TEXT("Multicast_RemoveItemFromList - Component Address: %p, Item Removed: %d, Total Items: %d"), 
+			this, ItemID, ItemList.Num());
+	}
+	else
+	{
+		TESTLOG(Warning, TEXT("Failed to remove item: %d, not found in list"), ItemID);
+	}
+}
+
+
+void UInvenComponent::Multicast_AcquireItemEffect_Implementation(const FVector Location)
+{
+	//#ifndef UE_SERVER
+	
+	// RPC to display the effect at the targeted player's location
+	if (!AcquireItemEffect)
+	{
+		TESTLOG(Error, TEXT("AcquireItemEffect not set"));
+		return;
+	}
+
+	UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), AcquireItemEffect, Location);
+	//#endif
+}
+
+
+void UInvenComponent::Multicast_UseItemEffect_Implementation(const FVector Location)
+{
+	//#ifndef UE_SERVER
+	
+	// RPC to display the effect at the targeted player's location
+	if (!UseItemEffect)
+	{
+		TESTLOG(Error, TEXT("HitEffect not set"));
+		return;
+	}
+
+	UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), UseItemEffect, Location);
+	TESTLOG(Error, TEXT("UseItemEffect: %p"), UseItemEffect);
+	//#endif
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////
+///////////               RPC FUNCTIONS                   /////////////////
+///////////////////////////////////////////////////////////////////////////
+
 
 
 void UInvenComponent::Client_OnItemAcquired_Implementation()
@@ -69,7 +169,7 @@ void UInvenComponent::Client_OnItemAcquired_Implementation()
 
 void UInvenComponent::Client_OnItemUsed_Implementation(int32 ItemID)
 {
-	// 아이템이 클라이언트 목록에 있는지 확인
+	// Check if the item is in the client list
 	bool bItemExists = false;
 	for (const FItemData& Item : ItemList)
 	{
@@ -82,43 +182,12 @@ void UInvenComponent::Client_OnItemUsed_Implementation(int32 ItemID)
 
 	if (bItemExists)
 	{
-		// 클라이언트에서 서버로 RPC 호출
+		// Call the server to process the item usage
 		Server_RequestUseItem(ItemID);
 	}
 	else
 	{
 		TESTLOG(Warning, TEXT("Client tried to use non-existent item: %d"), ItemID);
-	}
-}
-
-void UInvenComponent::ProcessItemAcquisition(const FItemData& ItemData)
-{
-	ItemList.Add(ItemData);
-	TESTLOG(Display, TEXT("Multicast_AddItemToList - Component Address: %p, Item Added: %s, Total Items: %d"), 
-		this, *ItemData.ItemName, ItemList.Num());
-}
-
-void UInvenComponent::ProcessItemUsage(int32 ItemID)
-{
-	int32 Index = -1;
-	for (int32 i = 0; i < ItemList.Num(); ++i)
-	{
-		if (ItemList[i].ItemID == ItemID)
-		{
-			Index = i;
-			break;
-		}
-	}
-
-	if (Index != -1)
-	{
-		ItemList.RemoveAt(Index);
-		TESTLOG(Display, TEXT("Multicast_RemoveItemFromList - Component Address: %p, Item Removed: %d, Total Items: %d"), 
-			this, ItemID, ItemList.Num());
-	}
-	else
-	{
-		TESTLOG(Warning, TEXT("Failed to remove item: %d, not found in list"), ItemID);
 	}
 }
 
@@ -156,6 +225,7 @@ bool UInvenComponent::Server_RequestAcquireItem_Validate()
 void UInvenComponent::Server_RequestAcquireItem_Implementation()
 {
 #ifdef UE_SERVER
+	
 	if (!OwnerCharacter || !GameMode)
 	{
 		TESTLOG(Error, TEXT("Invalid GameMode or Player"));
@@ -163,14 +233,15 @@ void UInvenComponent::Server_RequestAcquireItem_Implementation()
 	}
 
 	
-	FTAcquireItemTask* Task = GameMode->GetOrCreateAcquireItemTask();
+	FTAcquireItemTask* Task = new FTAcquireItemTask();
 	if (!Task)
 	{
 		TESTLOG(Error, TEXT("Failed to get or create attack task"));
 		return;
 	}
 
-	// 랜덤 아이템 생성
+	
+	// Create a random new item
 	FItemData NewItem;
 	NewItem.ItemID					= FMath::RandRange(1, 100);
 	NewItem.ItemName				= FString::Printf(TEXT("Item %d"), NewItem.ItemID);
@@ -181,11 +252,14 @@ void UInvenComponent::Server_RequestAcquireItem_Implementation()
 	NewItem.ItemFlags.Option		= FMath::RandRange(0, 63);
 	NewItem.ItemFlags.Reserved		= 0;
 
+	
 	UE_LOG(LogTemp, Display, TEXT("Created new item: %s (ID: %d, Type: %llu)"), 
 		*NewItem.ItemName, NewItem.ItemID, NewItem.ItemFlags.Type);
-		
-	Task->InitializeAcquireItem(OwnerCharacter, NewItem);
+
 	
+	Task->InitializeAcquireItem(OwnerCharacter, NewItem);
+
+	// Send the task you created to the server to process equipping items
 	GameMode->ExecuteAcquireItemTask(Task);
 
 #endif
@@ -211,6 +285,8 @@ void UInvenComponent::Server_RequestUseItem_Implementation(const int32 UseItemID
 	}
 
 	Task->InitializeItemUsage(OwnerCharacter, UseItemID);
+
+	// Send the task you created to the server to process using items
 	GameMode->ExecuteUseItemTask(Task);
 
 #endif

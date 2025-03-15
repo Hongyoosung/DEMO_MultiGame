@@ -17,15 +17,15 @@ UAntiCheatComponent::UAntiCheatComponent()
 
 void UAntiCheatComponent::UpdateAllChecksums()
 {
-    const float Health = OwnerCharacter->GetHealthComponent()->GetHealth();
-    const int32 HealthChecksum = FCrc::MemCrc32(&Health, sizeof(Health));
+    const float     Health              = OwnerCharacter->GetHealthComponent()->GetHealth();
+    const int32     HealthChecksum      = FCrc::MemCrc32(&Health, sizeof(Health));
 
-    const FVector Position = OwnerCharacter->GetActorLocation();
-    const int32 PositionChecksum = FCrc::MemCrc32(&Position, sizeof(FVector));
+    const FVector   Position            = OwnerCharacter->GetActorLocation();
+    const int32     PositionChecksum    = FCrc::MemCrc32(&Position, sizeof(FVector));
     
-    Checksums.SetHealthChecksum(HealthChecksum);
-    Checksums.SetPositionChecksum(PositionChecksum);
-    Checksums.SetLastChecksumPosition(Position);
+    Checksums.SetHealthChecksum         (HealthChecksum);
+    Checksums.SetPositionChecksum       (PositionChecksum);
+    Checksums.SetLastChecksumPosition   (Position);
 }
 
 
@@ -33,15 +33,14 @@ void UAntiCheatComponent::BeginPlay()
 {
     Super::BeginPlay();
     
-    // 소유자 참조 가져오기
     OwnerCharacter = Cast<APlayerCharacter>(GetOwner());
     if (!OwnerCharacter)
     {
         TESTLOG(Error, TEXT("AntiCheatComponent not attached to PlayerCharacter"));
         return;
     }
-    
 }
+
 
 void UAntiCheatComponent::InitializeGameMode(AMultiGameMode* InGameMode)
 {
@@ -59,10 +58,11 @@ bool UAntiCheatComponent::ValidatePlayerForAction() const
 {
     if (!OwnerCharacter)
     {
+        TESTLOG(Error, TEXT("AntiCheatComponent not attached to PlayerCharacter"));
         return false;
     }
     
-    // 안티 치트 매니저 획득
+    // Acquire the Anti-Cheat Manager
     UAntiCheatManager* AntiCheatManager = GetAntiCheatManager();
     if (!AntiCheatManager)
     {
@@ -70,7 +70,7 @@ bool UAntiCheatComponent::ValidatePlayerForAction() const
         return false;
     }
     
-    // 플레이어 유효성 검증을 매니저에 위임
+    // Delegating player validation to a manager
     return AntiCheatManager->VerifyPlayerValid(OwnerCharacter);
 }
 
@@ -97,14 +97,16 @@ bool UAntiCheatComponent::IsTargetInRange(const APlayerCharacter* Target) const
     {
         return false;
     }
+
     
-    UAntiCheatManager* AntiCheatManager = GetAntiCheatManager();
+    const UAntiCheatManager* AntiCheatManager = GetAntiCheatManager();
     if (!AntiCheatManager)
     {
         return false;
     }
+
     
-    // 공격 범위 검증을 매니저에 위임
+    // Delegate attack scope validation to a manager
     return AntiCheatManager->VerifyAttackRange(
         OwnerCharacter, 
         Target, 

@@ -3,24 +3,51 @@
 #include "Characters/PlayerCharacter.h"
 
 
+FTAttackTask::FTAttackTask() :	 AttackerPlayerWeak(nullptr),
+								CompletionCallback(nullptr), PlayerAttackRange(0.0f), 
+								CachedAttackerLocation(FVector::ZeroVector),
+								CachedAttackerName(TEXT(""))
+{
+}
+
+
 void FTAttackTask::InitializePlayerValues(APlayerCharacter* InPlayer)
 {
+	
 #ifdef UE_SERVER
+	
 	AttackerPlayerWeak		= InPlayer;
 	PlayerAttackRange		= InPlayer->GetAttackRange();
 
 	// 필요한 데이터 복사 (객체 의존성 줄이기)
 	CachedAttackerLocation	= InPlayer->GetActorLocation();
 	CachedAttackerName		= InPlayer->GetName();
+	
 #endif
+	
+}
+
+
+void FTAttackTask::SetCompletionCallback(TFunction<void(FTAttackTask*)> InCallback)
+{
+	
+#ifdef UE_SERVER
+	
+	CompletionCallback = MoveTemp(InCallback);
+	
+#endif
+	
 }
 
 
 void FTAttackTask::DoThreadedWork()
 {
+	
 #ifdef UE_SERVER
+	
 	SetTaskRunning(true);
-        
+
+	
 	APlayerCharacter* AttackerPlayer = AttackerPlayerWeak.Get();
 	if (!AttackerPlayer->IsValidLowLevel())
 	{
@@ -29,14 +56,15 @@ void FTAttackTask::DoThreadedWork()
 		return;
 	}
 
-	
-	const FVector AttackerLocation = AttackerPlayer->GetActorLocation();
-	const float AttackRange = PlayerAttackRange;
 	TWeakObjectPtr<UWorld> WorldPtr = AttackerPlayer->GetWorld();
+	const FVector AttackerLocation	= AttackerPlayer->GetActorLocation();
+	const float AttackRange			= PlayerAttackRange;
+	
 
 	TESTLOG(Warning, TEXT("Attack executed by %s"), *AttackerPlayer->GetName());
 
-	// 게임 스레드 작업을 예약하고 태스크 자체는 대기
+	
+	// Schedule a game thread task, while the task itself waits
 	AsyncTask(ENamedThreads::GameThread, [this, AttackerLocation, AttackRange, WorldPtr]()
 	{
 		if (!WorldPtr.IsValid())
@@ -60,13 +88,17 @@ void FTAttackTask::DoThreadedWork()
 
 		FinishTask();
 	});
+	
 #endif
+	
 }
 
 
 void FTAttackTask::Abandon()
 {
+	
 #ifdef UE_SERVER
+	
 	if (IsTaskRunning())
 	{
 		TESTLOG(Warning, TEXT("Abandoning task %p"), this);
@@ -78,13 +110,17 @@ void FTAttackTask::Abandon()
 			CompletionCallback = nullptr;
 		}
 	}
+	
 #endif
+	
 }
 
 
 void FTAttackTask::Init()
 {
+	
 #ifdef UE_SERVER
+	
 	if (IsTaskRunning())
 	{
 		TESTLOG(Warning, TEXT("Task is still running, skipping Init"));
@@ -99,48 +135,56 @@ void FTAttackTask::Init()
 	CachedAttackerName = TEXT("");
 	SetReturnedToPool(true);
 	SetTaskRunning(false); // 상태 재설정
+	
 #endif
+	
 }
 
 
 void FTAttackTask::FinishTask()
 {
+	
 #ifdef UE_SERVER
-	// 이미 완료된 태스크를 다시 완료하지 않도록 함
+	
+	// Avoid re-completing tasks that have already been completed
 	if (!bIsTaskRunning)
 	{
-		bIsTaskRunning = false;
+		return;
+	}
             
-		// 완료 콜백을 호출하기 전에 게임 스레드에 있는지 확인
-		if (!IsInGameThread())
+	// Make sure you're in the game thread before calling the completion callback
+	if (!IsInGameThread())
+	{
+		bIsTaskRunning = false;
+		AsyncTask(ENamedThreads::GameThread, [this]()
 		{
-			AsyncTask(ENamedThreads::GameThread, [this]()
-			{
-				if (CompletionCallback) 
-				{
-					auto TempCallback = CompletionCallback;
-					CompletionCallback = nullptr; // 콜백을 한 번만 호출하도록 함
-					TempCallback(this);
-				}
-			});
-		}
-		else
-		{
-			if (CompletionCallback)
+			if (CompletionCallback) 
 			{
 				auto TempCallback = CompletionCallback;
 				CompletionCallback = nullptr; // 콜백을 한 번만 호출하도록 함
 				TempCallback(this);
 			}
+		});
+	}
+	else
+	{
+		if (CompletionCallback)
+		{
+			auto TempCallback = CompletionCallback;
+			CompletionCallback = nullptr; // 콜백을 한 번만 호출하도록 함
+			TempCallback(this);
 		}
 	}
 #endif
+	
 }
 
 
 void FTAttackTask::ApplyDamageToHitPlayers(const TArray<FHitResult>& HitResults)
 {
+	
 #ifdef UE_SERVER
+	
 	check(IsInGameThread());
 
 	if (!AttackerPlayerWeak.Get() || !AttackerPlayerWeak->IsValidLowLevel())
@@ -154,6 +198,7 @@ void FTAttackTask::ApplyDamageToHitPlayers(const TArray<FHitResult>& HitResults)
 		if (OtherCharacter && OtherCharacter != AttackerPlayerWeak.Get() && OtherCharacter->IsValidLowLevel())
 		{
 			HitPlayers.Add(OtherCharacter);
+			
 			OtherCharacter->TakeDamage(10.0f);
 
 			TESTLOG(Warning, TEXT("Player %s hit by %s"), *OtherCharacter->GetName(), *AttackerPlayerWeak.Get()->GetName());
@@ -163,16 +208,20 @@ void FTAttackTask::ApplyDamageToHitPlayers(const TArray<FHitResult>& HitResults)
 			TESTLOG(Error, TEXT("Hit actor is not a valid player character!"));
 		}
 	}
+	
 #endif
+	
 }
 
 
 void FTAttackTask::PerformCollisionDetection(const FVector& Start, float Range, TWeakObjectPtr<UWorld> WorldPtr,
 	TArray<FHitResult>& OutHitResults) const
 {
+	
 #ifdef UE_SERVER
-	check(IsInGameThread()); // 게임 스레드에서만 호출되도록 보장
-
+	
+	check(IsInGameThread()); // Ensuring that it is only called from the game thread
+	
 	if (!WorldPtr.IsValid())
 	{
 		TESTLOG(Warning, TEXT("World is no longer valid!"));
@@ -193,7 +242,7 @@ void FTAttackTask::PerformCollisionDetection(const FVector& Start, float Range, 
 
 	const FVector End = Start;
 
-	// 구체 형태로 충돌 검사
+	
 	World->SweepMultiByChannel(
 		OutHitResults,
 		Start,
@@ -203,9 +252,12 @@ void FTAttackTask::PerformCollisionDetection(const FVector& Start, float Range, 
 		FCollisionShape::MakeSphere(Range),
 		Params);
 
+	
 	OutHitResults.RemoveAll([](const FHitResult& Hit)
 	{
 		return !Cast<APlayerCharacter>(Hit.GetActor());
 	});
+	
 #endif
+	
 }

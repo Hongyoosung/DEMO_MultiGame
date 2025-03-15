@@ -8,9 +8,12 @@
 #include "Managers/AntiCheatManager.h"
 #include "Net/UnrealNetwork.h"
 
-AMultiGameMode::AMultiGameMode()
+
+AMultiGameMode::AMultiGameMode() : AntiCheatManager(nullptr), ThreadPool(nullptr)
 {
+    PrimaryActorTick.bCanEverTick = false;
 }
+
 
 void AMultiGameMode::BeginPlay()
 {
@@ -20,29 +23,33 @@ void AMultiGameMode::BeginPlay()
 
     ThreadPool = FCustomQueuedThreadPool::Allocate();
     ThreadPool->Create(4, 32 * 1024, TPri_Normal, TEXT("GameStateThreadPool"));
+
     
-    // 스레드 풀 생성
+    // Create Thread Pool
     if (!ThreadPool)
     {
         ThreadPool = FCustomQueuedThreadPool::Allocate();
         ThreadPool->Create(4, 32 * 1024, TPri_Normal, TEXT("GameStateThreadPool"));
     }
 
+    
     InitializeTaskPools();
     
     AntiCheatManager = GetGameInstance()->GetSubsystem<UAntiCheatManager>();
+    if (!AntiCheatManager)
+    {
+        TESTLOG(Error, TEXT("Failed to get AntiCheatManager"));
+    }
 
-    TESTLOG(Error, TEXT("asasasassdassasassdasdasdaaaaasasassdasdasdaaaaasasassdasdasdaaaaaaa"));
-    TESTLOG(Error, TEXT("asasasassdassasassdasdasdaaaaasasassdasdasdaaaaasasassdasdasdaaaaaaa"));
-    TESTLOG(Error, TEXT("asasasassdassasassdasdasdaaaaasasassdasdasdaaaaasasassdasdasdaaaaaaa"));
 #endif
 }
 
+
 void AMultiGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    
 #ifdef UE_SERVER
     
-
     if (ThreadPool)
     {
         ThreadPool->WaitForCompletion();
@@ -56,6 +63,7 @@ void AMultiGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
     }
 
 
+    // Clean up task pools
     FTAttackTask* AttackTask;
     while (AttackTaskPool.Dequeue(AttackTask)) { delete AttackTask; }
     FTAcquireItemTask* AcquireTask;
@@ -68,11 +76,13 @@ void AMultiGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
+
 void AMultiGameMode::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(AMultiGameMode, AntiCheatManager);
 }
+
 
 void AMultiGameMode::InitializeTaskPools()
 {
@@ -88,8 +98,10 @@ void AMultiGameMode::InitializeTaskPools()
 #endif
 }
 
+
 void AMultiGameMode::AdjustThreadPoolSize()
 {
+    
 #ifdef UE_SERVER
 
     const int32 ActiveTasks = ThreadPool->GetActiveTaskCount();
@@ -105,11 +117,15 @@ void AMultiGameMode::AdjustThreadPoolSize()
     }
     
 #endif
+    
 }
+
 
 void AMultiGameMode::ExecuteAttackTask(FTAttackTask* Task)
 {
+    
 #ifdef UE_SERVER
+    
     if (!Task || !ThreadPool)
     {
         TESTLOG(Error, TEXT("Invalid Task or ThreadPool"));
@@ -123,13 +139,25 @@ void AMultiGameMode::ExecuteAttackTask(FTAttackTask* Task)
             ReturnTaskToPool(CompletedTask);
         }
     });
+    
     ThreadPool->AddQueuedWork(Task, EQueuedWorkPriority::Normal);
+    
 #endif
+    
 }
+
 
 void AMultiGameMode::ExecuteAcquireItemTask(FTAcquireItemTask* Task)
 {
+    
 #ifdef UE_SERVER
+
+    if (!Task || !ThreadPool)
+    {
+        TESTLOG(Error, TEXT("Invalid Task or ThreadPool"));
+        return;
+    }
+    
     Task->SetCompletionCallback([this, Task](FTAcquireItemTask* CompletedTask)
     {
         if (!CompletedTask->IsReturnedToPool())
@@ -138,12 +166,22 @@ void AMultiGameMode::ExecuteAcquireItemTask(FTAcquireItemTask* Task)
         }
     });
     ThreadPool->AddQueuedWork(Task, EQueuedWorkPriority::Normal);
+    
 #endif
+    
 }
 
 void AMultiGameMode::ExecuteUseItemTask(FTUseItemTask* Task)
 {
+    
 #ifdef UE_SERVER
+
+    if (!Task || !ThreadPool)
+    {
+        TESTLOG(Error, TEXT("Invalid Task or ThreadPool"));
+        return;
+    }
+    
     Task->SetCompletionCallback([this, Task](FTUseItemTask* CompletedTask)
     {
         if (!CompletedTask->IsReturnedToPool())
@@ -151,50 +189,72 @@ void AMultiGameMode::ExecuteUseItemTask(FTUseItemTask* Task)
             ReturnTaskToPool(CompletedTask);
         }
     });
+    
     ThreadPool->AddQueuedWork(Task, EQueuedWorkPriority::Normal);
+    
 #endif
 }
 
+
 FTAttackTask* AMultiGameMode::GetOrCreateAttackTask()
 {
+    
 #ifdef UE_SERVER
+    
     FTAttackTask* Task = nullptr;
+    
     {
         FScopeLock Lock(&TaskPoolLock);
+        
         if (!AttackTaskPool.Dequeue(Task))
         {
             Task = new FTAttackTask();
         }
     }
+    
     if (Task) Task->SetReturnedToPool(false);
+    
     return Task;
+    
 #else
     return nullptr;
 #endif
 }
 
+
 FTAcquireItemTask* AMultiGameMode::GetOrCreateAcquireItemTask()
 {
+    
 #ifdef UE_SERVER
+    
     FTAcquireItemTask* Task = nullptr;
+    
     {
         FScopeLock Lock(&TaskPoolLock);
+        
         if (!AcquireItemTaskPool.Dequeue(Task))
         {
             Task = new FTAcquireItemTask();
         }
     }
+    
     if (Task) Task->SetReturnedToPool(false);
+    
     return Task;
+
 #else
     return nullptr;
 #endif
 }
 
+
 FTUseItemTask* AMultiGameMode::GetOrCreateUseItemTask()
 {
+    
 #ifdef UE_SERVER
+    
     FTUseItemTask* Task = nullptr;
+    
     {
         FScopeLock Lock(&TaskPoolLock);
         if (!UseItemTaskPool.Dequeue(Task))
@@ -202,42 +262,63 @@ FTUseItemTask* AMultiGameMode::GetOrCreateUseItemTask()
             Task = new FTUseItemTask();
         }
     }
+    
     if (Task) Task->SetReturnedToPool(false);
+    
     return Task;
+
 #else
     return nullptr;
 #endif
+    
 }
+
 
 void AMultiGameMode::ReturnTaskToPool(FTAttackTask* Task)
 {
+    
 #ifdef UE_SERVER
+    
     if (!Task || Task->IsReturnedToPool() || Task->IsTaskRunning()) return;
+    
     FScopeLock Lock(&TaskPoolLock);
     Task->Init();
     Task->SetReturnedToPool(true);
     AttackTaskPool.Enqueue(Task);
+
 #endif
+    
 }
 
 void AMultiGameMode::ReturnTaskToPool(FTAcquireItemTask* Task)
 {
+    
 #ifdef UE_SERVER
+    
     if (!Task || Task->IsReturnedToPool() || Task->IsTaskRunning()) return;
+    
     FScopeLock Lock(&TaskPoolLock);
     Task->Init();
     Task->SetReturnedToPool(true);
     AcquireItemTaskPool.Enqueue(Task);
+
 #endif
+    
 }
+
 
 void AMultiGameMode::ReturnTaskToPool(FTUseItemTask* Task)
 {
+    
 #ifdef UE_SERVER
+    
     if (!Task || Task->IsReturnedToPool() || Task->IsTaskRunning()) return;
+    
     FScopeLock Lock(&TaskPoolLock);
     Task->Init();
     Task->SetReturnedToPool(true);
     UseItemTaskPool.Enqueue(Task);
+    
 #endif
+    
 }

@@ -27,8 +27,7 @@ void UHealthComponent::BeginPlay()
 	Super::BeginPlay();
 
 	SetHealth(MaxHealth);
-    
-	// Get owner reference
+	
 	OwnerCharacter = Cast<APlayerCharacter>(GetOwner());
 	if (!OwnerCharacter)
 	{
@@ -36,20 +35,25 @@ void UHealthComponent::BeginPlay()
 	}
 }
 
-void UHealthComponent::InitializeGameState()
+
+void UHealthComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
-	
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(UHealthComponent, Health);
 }
 
 
 void UHealthComponent::Attack()
 {
+	// Execute an attack function on the client,
+	// which leads to the delivery of an attack task to the server
 	Client_Attack();
 }
 
 
 void UHealthComponent::TakeDamage(const float Damage)
 {
+	
 #ifdef UE_SERVER
 	
 	if (OwnerCharacter->HasAuthority())
@@ -58,13 +62,15 @@ void UHealthComponent::TakeDamage(const float Damage)
 		SetHealth(NewHealth);
 		Multicast_SpawnHitEffect(OwnerCharacter->GetActorLocation());
 	}
+	
 #endif
 }
 
 
 void UHealthComponent::Multicast_SpawnHitEffect_Implementation(const FVector Location)
 {
-	//#ifndef UE_SERVER
+//#ifndef UE_SERVER
+	
 	// RPC to display the effect at the targeted player's location
 	if (!HitEffect)
 	{
@@ -73,14 +79,7 @@ void UHealthComponent::Multicast_SpawnHitEffect_Implementation(const FVector Loc
 	}
 
 	UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), HitEffect, Location);
-	//#endif
-}
-
-
-void UHealthComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(UHealthComponent, Health);
+//#endif
 }
 
 
@@ -104,10 +103,15 @@ void UHealthComponent::OnRep_Health()
 //#ifndef UE_SERVER
 	HealthPercent = (MaxHealth > 0.0f) ? (Health / MaxHealth) : 0.0f;
 	
-	// Notify listeners about health change
-	OnHealthChanged.Broadcast(HealthPercent);
+	OnHealthChanged.Broadcast(HealthPercent); // Notify listeners about health change
 //#endif
 }
+
+
+
+///////////////////////////////////////////////////////////////////////////
+///////////               RPC FUNCTIONS                   /////////////////
+///////////////////////////////////////////////////////////////////////////
 
 
 
@@ -127,9 +131,9 @@ bool UHealthComponent::Server_Attack_Validate()
 		return false;
 	}
 	
-	return OwnerCharacter->PlayerVerification(OwnerCharacter);
-#else
-	return true;
+	return	OwnerCharacter->PlayerVerification(OwnerCharacter);
+			//OwnerCharacter->AttackVerification(OwnerCharacter);
+	
 #endif
 }
 
@@ -137,20 +141,8 @@ bool UHealthComponent::Server_Attack_Validate()
 void UHealthComponent::Server_Attack_Implementation()
 {
 #ifdef UE_SERVER
-	// Verify checksums
-	/*if (!OwnerCharacter->AttackVerification(OwnerCharacter))
-	{
-		return;
-	}*/
-    
 
-	if (!OwnerCharacter)
-	{
-		TESTLOG(Error, TEXT("Invalid ThreadPool or Player"));
-		return;
-	}
-
-	
+	// Create a task and set an owner
 	FTAttackTask* Task = OwnerCharacter->GetGameMode()->GetOrCreateAttackTask();
 	if (!Task)
 	{
@@ -160,6 +152,8 @@ void UHealthComponent::Server_Attack_Implementation()
 
 	Task->InitializePlayerValues(OwnerCharacter);
 
+	// Passing attack tasks to the server (game mode)
 	OwnerCharacter->GetGameMode()->ExecuteAttackTask(Task);
+	
 #endif
 }

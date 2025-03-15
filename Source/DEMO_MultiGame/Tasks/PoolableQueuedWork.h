@@ -13,6 +13,7 @@ public:
 	void SetReturnedToPool	(const bool bInReturnedToPool)	{	bReturnedToPool = bInReturnedToPool;	}
 	void SetTaskRunning		(const bool bInTaskRunning)		{	bIsTaskRunning = bInTaskRunning;		}
 
+	
 protected:
 	bool bReturnedToPool = false;
 	FThreadSafeBool bIsTaskRunning;

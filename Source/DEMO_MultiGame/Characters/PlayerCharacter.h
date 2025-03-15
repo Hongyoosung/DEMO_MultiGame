@@ -31,8 +31,14 @@ public:
     
     // Take damage function
     UFUNCTION()
-    void TakeDamage(float Damage) const;
-    
+    void TakeDamage         (float Damage)          const;
+
+    UFUNCTION()
+    void TakeAcquireItem    (const FItemData& Item) const;
+
+    UFUNCTION()
+    void TakeUseItem        (int32 ItemID)          const;
+
     
     // Getter
     FORCEINLINE AMultiGameMode*         GetGameMode             ()      const   {       return GameMode;            }
@@ -40,15 +46,20 @@ public:
     FORCEINLINE UHealthComponent*       GetHealthComponent      ()      const   {       return HealthComponent;     }
     FORCEINLINE UInvenComponent*        GetInvenComponent       ()      const   {       return InvenComponent;      }
     FORCEINLINE UPlayerUIComponent*     GetUIComponent          ()      const   {       return UIComponent;         }
+    
     FORCEINLINE float                   GetAttackRange          ()      const   {       return AttackRange;         }
 
+    TArray<FItemData> GetItemList() const;
+    
     
 protected:
     virtual void BeginPlay() override;
     virtual void SetupPlayerInputComponent(class UInputComponent* InputComponent) override;
+
     
 private:
     void InitializeManagers();
+
     
     // Task functions
     UFUNCTION()
@@ -60,6 +71,7 @@ private:
     UFUNCTION()
     void AcquireItem();
 
+    
     // Verification methods
     bool AttackVerification (const APlayerCharacter* Player)                        const;
     bool ItemVerification   (const APlayerCharacter* Player, const int32 ItemID)    const;
@@ -67,7 +79,6 @@ private:
 
     
 private:
-    // Game references
     UPROPERTY()
     AMultiGameMode*        GameMode;
     
@@ -87,7 +98,6 @@ private:
     UAntiCheatComponent*    AntiCheatComponent;
     
     
-    // Properties
     UPROPERTY()
     float                   AttackRange;
     

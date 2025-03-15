@@ -9,6 +9,7 @@ void UHealthBarWidget::NativeConstruct()
 //#endif
 }
 
+
 void UHealthBarWidget::UpdateHealthBar(float HealthPercentage)
 {
 //#ifndef UE_SERVER
@@ -18,6 +19,7 @@ void UHealthBarWidget::UpdateHealthBar(float HealthPercentage)
 	}
 //#endif
 }
+
 
 void UHealthBarWidget::UpdateHealthBarColor(bool bIsOwnPlayer) const
 {

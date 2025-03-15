@@ -14,10 +14,10 @@ public:
     ~FCustomThread() override;
 
     
-    virtual bool    Init()  override { return true; }
-    virtual void    Exit()  override {}
-    virtual uint32  Run()   override;
-    virtual void    Stop()  override { bShutdown = true; }
+    virtual bool        Init    ()  override    {   return true;      }
+    virtual uint32      Run     ()  override;
+    virtual void        Stop    ()  override    {   bShutdown = true; }
+    virtual void        Exit    ()  override    {}
 
     
     void Start(const uint32 StackSize, const EThreadPriority Priority, const TCHAR* Name);
@@ -25,7 +25,7 @@ public:
 
     
 private:
-    FCustomQueuedThreadPool* Pool;
-    FThreadSafeBool bShutdown;
-    FRunnableThread* Thread;
+    FCustomQueuedThreadPool*    Pool;
+    FThreadSafeBool             bShutdown;
+    FRunnableThread*            Thread;
 };
