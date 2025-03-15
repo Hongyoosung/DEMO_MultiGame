@@ -33,8 +33,9 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
     Super::SetupPlayerInputComponent(PlayerInputComponent);
     PlayerInputComponent->BindAction("Attack",      IE_Pressed, this, &APlayerCharacter::Attack);
     PlayerInputComponent->BindAction("AcquireItem", IE_Pressed, this, &APlayerCharacter::AcquireItem); 
-    PlayerInputComponent->BindAction("UseItem",     IE_Pressed, this, &APlayerCharacter::UseItem); 
+    PlayerInputComponent->BindAction("UseItem",     IE_Pressed, this, &APlayerCharacter::UseItem);
 }
+
 
 void APlayerCharacter::InitializeManagers()
 {
@@ -48,18 +49,24 @@ void APlayerCharacter::InitializeManagers()
 }
 
 
+TArray<FItemData> APlayerCharacter::GetItemList() const
+{
+    return InvenComponent->GetItemList();
+}
+
 void APlayerCharacter::BeginPlay()
 {
     Super::BeginPlay();
     
-    // 서버에서만 GameMode 초기화
-    if (HasAuthority()) // 서버에서만 실행
+    // Initialize gamemode on server only
+    if (HasAuthority())
     {
         if (AMultiGameMode* GM = Cast<AMultiGameMode>(UGameplayStatics::GetGameMode(this)))
         {
             GameMode = GM;
-            AntiCheatComponent->InitializeGameMode(GM);
-            InvenComponent->InitializeGameMode(GM);
+            
+            AntiCheatComponent  ->  InitializeGameMode(GM);
+            InvenComponent      ->  InitializeGameMode(GM);
         }
         else
         {
@@ -72,27 +79,51 @@ void APlayerCharacter::BeginPlay()
 void APlayerCharacter::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
-    
-    static float AccumulatedTime = 0.0f;
-    AccumulatedTime += DeltaTime;
-
-    if (AccumulatedTime >= 0.2f)
-    {
-        //AntiCheatComponent->UpdateAllChecksums();
-        
-        AccumulatedTime = 0.0f;
-    }
 }
 
 
 void APlayerCharacter::TakeDamage(const float Damage) const
 {
+    
 #ifdef UE_SERVER
+    
     if (HealthComponent)
     {
         HealthComponent->TakeDamage(Damage);
     }
+    
 #endif
+    
+}
+
+
+void APlayerCharacter::TakeAcquireItem(const FItemData& Item) const
+{
+    
+#ifdef UE_SERVER
+    
+    if (InvenComponent)
+    {
+        InvenComponent->ProcessItemAcquisition(Item);
+    }
+    
+#endif
+    
+}
+
+
+void APlayerCharacter::TakeUseItem(const int32 ItemID) const
+{
+    
+#ifdef UE_SERVER
+    
+    if (InvenComponent)
+    {
+        InvenComponent->ProcessItemUsage(ItemID);
+    }
+    
+#endif
+    
 }
 
 
@@ -104,7 +135,7 @@ void APlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 
 bool APlayerCharacter::AttackVerification(const APlayerCharacter* Player) const
 {
-    return GameMode->GetAntiCheatManager()->VerifyAllChecksums(this);
+    return GameMode->GetAntiCheatManager()->VerifyPositionChecksum(this);
 }
 
 
@@ -113,35 +144,37 @@ bool APlayerCharacter::ItemVerification(const APlayerCharacter* Player, const in
     return AntiCheatManager->VerifyItemUsage(Player, ItemID);
 }
 
+
 bool APlayerCharacter::PlayerVerification(const APlayerCharacter* Player) const
 {
     return AntiCheatManager->VerifyPlayerValid(Player);
 }
+
 
 void APlayerCharacter::Attack() 
 {
     HealthComponent->Attack();
 }
 
+
 void APlayerCharacter::UseItem()
 {
-    TESTLOG(Display, TEXT("UseItem called - InvenComponent Address: %p"), InvenComponent);
-    
     TArray<int32> ItemIDs;
-
-    // 아이템 목록에서 사용 가능한 아이템 ID 수집
+    
+    // Collecting available item IDs from an item list 
     for (const auto& Item : InvenComponent->GetItemList())
     {
         ItemIDs.Add(Item.ItemID);
     }
 
+    
     if (ItemIDs.Num() > 0)
     {
-        // 랜덤 아이템 선택
+        // Selection Random Item ID
         const int32 ItemID = ItemIDs[FMath::RandRange(0, ItemIDs.Num() - 1)];
         TESTLOG(Display, TEXT("Using item with ID: %d"), ItemID);
-        
-        // 아이템 사용 함수 호출
+
+        // Call using item function
         InvenComponent->RequestUseItem(ItemID);
     }
     else

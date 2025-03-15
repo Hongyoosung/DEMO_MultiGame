@@ -15,29 +15,30 @@ USTRUCT()
 struct FPlayerChecksum
 {
 	GENERATED_BODY()
+	
 public:
 	FPlayerChecksum() : HealthChecksum(0), PositionChecksum(0), LastChecksumPosition(FVector3d(0, 0, 0)) {}
 
 	// Getters
-	uint32		GetHealthChecksum		()	const					{		return HealthChecksum;			}
-	uint32		GetPositionChecksum		()	const					{		return PositionChecksum;		}
-	FVector		GetLastChecksumPosition	()	const					{		return LastChecksumPosition;	}
+	FORCEINLINE uint32		GetHealthChecksum		()	const					{		return HealthChecksum;			}
+	FORCEINLINE uint32		GetPositionChecksum		()	const					{		return PositionChecksum;		}
+	FORCEINLINE FVector		GetLastChecksumPosition	()	const					{		return LastChecksumPosition;	}
 	
 	// Setters
-	void		SetHealthChecksum		(const uint32 Checksum)		{		HealthChecksum = Checksum;			}
-	void		SetPositionChecksum		(const uint32 Checksum)		{		PositionChecksum = Checksum;		}
-	void		SetLastChecksumPosition	(const FVector& Position)	{		LastChecksumPosition = Position;	}
+	FORCEINLINE void		SetHealthChecksum		(const uint32 Checksum)		{		HealthChecksum = Checksum;			}
+	FORCEINLINE void		SetPositionChecksum		(const uint32 Checksum)		{		PositionChecksum = Checksum;		}
+	FORCEINLINE void		SetLastChecksumPosition	(const FVector& Position)	{		LastChecksumPosition = Position;	}
 
 
 private:
 	UPROPERTY()
-	uint32 HealthChecksum;
+	uint32		HealthChecksum;
 
 	UPROPERTY()
-	uint32 PositionChecksum;
+	uint32		PositionChecksum;
 
 	UPROPERTY()
-	FVector LastChecksumPosition;
+	FVector		LastChecksumPosition;
 };
 
 
@@ -49,32 +50,25 @@ class DEMO_MULTIGAME_API UAntiCheatComponent : public UActorComponent
 public:
 	UAntiCheatComponent();
 
-	void InitializeGameMode(AMultiGameMode* InGameMode);
+	void InitializeGameMode			(AMultiGameMode* InGameMode);
 	
-	FPlayerChecksum GetChecksums() const { return Checksums; }
+	// Verify checksum methods
+	void UpdateAllChecksums			();
+	bool ValidatePlayerForAction	() const;
+	bool IsTargetInRange			(const APlayerCharacter* Target) const;
 
-	void UpdateAllChecksums();
-
-	// 액션 전 기본 검증 (로컬 검증 후 필요시 매니저에 위임)
-	bool ValidatePlayerForAction() const;
-    
-	// 공격 범위 검증을 위한 헬퍼 메서드
-	bool IsTargetInRange(const APlayerCharacter* Target) const;
+	
+	FORCEINLINE FPlayerChecksum GetChecksums() const { return Checksums; }
 
 	
 protected:
 	virtual void BeginPlay() override;
 
+	
 private:
-	// 안티 치트 매니저에 대한 참조 획득
-	UAntiCheatManager* GetAntiCheatManager() const;
-    
-	// 컴포넌트 설정
 	UPROPERTY(EditDefaultsOnly, Category = "AntiCheat")
 	float ChecksumUpdateInterval;
 
-	float TimeSinceLastChecksumUpdate;
-    
 	UPROPERTY()
 	APlayerCharacter* OwnerCharacter;
 
@@ -83,7 +77,8 @@ private:
 	
 	UPROPERTY()
 	FPlayerChecksum Checksums;
-};
 
-// AntiCheatManager.h - 기존 코드 유지
-// 주요 변경점: 컴포넌트와의 협력을 위한 인터페이스 추가
+	
+	UAntiCheatManager* GetAntiCheatManager() const;
+	float TimeSinceLastChecksumUpdate;
+};

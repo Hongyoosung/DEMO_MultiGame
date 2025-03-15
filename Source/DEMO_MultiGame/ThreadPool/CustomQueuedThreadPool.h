@@ -3,8 +3,10 @@
 #include "CoreMinimal.h"
 #include "Misc/QueuedThreadPool.h"
 
+
 class FPoolableQueuedWork;
 class FCustomThread;
+
 
 class FCustomQueuedThreadPool final : public FQueuedThreadPool
 {
@@ -14,55 +16,72 @@ public:
         return new FCustomQueuedThreadPool();
     }
 
+    
     FCustomQueuedThreadPool();
+    
     virtual ~FCustomQueuedThreadPool() override;
-
-    // 스레드 풀 생성
-    virtual bool Create(const uint32 InNumQueuedThreads, const uint32 StackSize, const EThreadPriority ThreadPriority, const TCHAR* Name) override;
-
-    // 스레드 풀 종료
+    
+    virtual bool Create(const uint32 InNumQueuedThreads, const uint32 StackSize,
+                        const EThreadPriority ThreadPriority, const TCHAR* Name)
+                        override;
+    
     virtual void Destroy() override;
 
-    // 작업 추가
+    
+    // Add a task to the thread pool
     virtual void AddQueuedWork(IQueuedWork* InQueuedWork, EQueuedWorkPriority InQueuedWorkPriority) override;
 
-    // 작업 제거
-    virtual bool RetractQueuedWork(IQueuedWork* InQueuedWork) override;
     
-    // 스레드 수 반환
-    virtual int32 GetNumThreads() const override {  return NumThreads;  }
+    // Remove a task from the thread pool
+    virtual bool RetractQueuedWork(IQueuedWork* InQueuedWork) override;
 
-    void WaitForCompletion();
-    void ForceShutDown();
+    
+    virtual FORCEINLINE int32 GetNumThreads() const override {  return NumThreads;  }
+
+    
+    void WaitForCompletion(); // Wait for all tasks to complete
+    void ForceShutDown();     // Force shutdown of all tasks
+
+
+    void IncrementActiveTaskCount   ()          {    ActiveTaskCounter.Increment();  }
+    void DecrementActiveTaskCount   ()          {    ActiveTaskCounter.Decrement();  }
+
     
     bool AddThread(uint32 StackSize, EThreadPriority ThreadPriority, const TCHAR* Name);
-    void IncrementActiveTaskCount   ()      {       ActiveTaskCounter.Increment();      }
-    void DecrementActiveTaskCount   ()      {       ActiveTaskCounter.Decrement();      }
     bool RemoveThread();
     
 
-    TQueue<FPoolableQueuedWork*, EQueueMode::Mpsc>& GetHighPriorityWork     ()          {   return HighPriorityWork;        }
-    TQueue<FPoolableQueuedWork*, EQueueMode::Mpsc>& GetNormalPriorityWork   ()          {   return NormalPriorityWork;      }
-    TQueue<FPoolableQueuedWork*, EQueueMode::Mpsc>& GetLowPriorityWork      ()          {   return LowPriorityWork;         }
-    FCriticalSection& GetSynchronizationObject                              ()          {   return SynchronizationObject;   }
-    FEvent* GetWorkAvailableEvent                                           ()  const   {   return WorkAvailableEvent;      }
+    FORCEINLINE TQueue<FPoolableQueuedWork*, EQueueMode::Mpsc>&
+        GetHighPriorityWork         ()          {    return HighPriorityWork;       }
+    FORCEINLINE TQueue<FPoolableQueuedWork*, EQueueMode::Mpsc>&
+        GetNormalPriorityWork       ()          {   return NormalPriorityWork;      }
+    FORCEINLINE TQueue<FPoolableQueuedWork*, EQueueMode::Mpsc>&
+        GetLowPriorityWork          ()          {   return LowPriorityWork;         }
+
     
-    int32                                           GetActiveTaskCount      ()  const   {   return ActiveTaskCounter.GetValue();    }
+    FORCEINLINE FCriticalSection&
+        GetSynchronizationObject    ()          {   return SynchronizationObject;   }
+    FORCEINLINE FEvent*
+        GetWorkAvailableEvent       ()  const   {   return WorkAvailableEvent;      }
+
+
+    
+    FORCEINLINE int32 GetActiveTaskCount()  const  {   return ActiveTaskCounter.GetValue();    }
     
 
 private:
-    TArray<FCustomThread*>                          Threads;                // 스레드 배열
+    TArray<FCustomThread*>                          Threads;                
 
     TQueue<FPoolableQueuedWork*, EQueueMode::Mpsc>  HighPriorityWork;
     TQueue<FPoolableQueuedWork*, EQueueMode::Mpsc>  NormalPriorityWork;
     TQueue<FPoolableQueuedWork*, EQueueMode::Mpsc>  LowPriorityWork;
     
-    FCriticalSection                                SynchronizationObject;  // 동기화 객체
+    FCriticalSection                                SynchronizationObject;  // sync object
     
-    FThreadSafeCounter                              ActiveTaskCounter;      // 활성 작업 카운터
+    FThreadSafeCounter                              ActiveTaskCounter;      // active task counter
     FThreadSafeBool                                 bIsDestroying;
     
-    int32                                           NumThreads = 0;         // 스레드 수
+    int32                                           NumThreads = 0;         
 
     FEvent*                                         WorkAvailableEvent;
 };

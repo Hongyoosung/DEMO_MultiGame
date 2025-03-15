@@ -14,22 +14,18 @@ class FTAcquireItemTask final : public FPoolableQueuedWork
 public:
 	void InitializeAcquireItem(APlayerCharacter* InPlayer, const FItemData& InItem);
 
-	void SetCompletionCallback(TFunction<void(FTAcquireItemTask*)> InCallback)
-	{
-#ifdef UE_SERVER
-		CompletionCallback = MoveTemp(InCallback);
-#endif
-	}
+	void SetCompletionCallback(TFunction<void(FTAcquireItemTask*)> InCallback);
 
 	virtual void DoThreadedWork() override;
 	virtual void Abandon() override {}
 	virtual void Init() override {}
 
+	
 private:
 	void FinishTask();
 
-	TWeakObjectPtr<APlayerCharacter> PlayerWeak;
-	FItemData ItemData;
-	
 	TFunction<void(FTAcquireItemTask*)> CompletionCallback;
+	TWeakObjectPtr<APlayerCharacter>	PlayerWeak;
+	
+	FItemData ItemData;
 };

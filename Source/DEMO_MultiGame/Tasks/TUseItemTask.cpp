@@ -1,14 +1,24 @@
 ﻿#include "TUseItemTask.h"
-
 #include "DEMO_MultiGame.h"
 #include "Tables/ItemData.h"
-#include "Components/InvenComponent.h"
 #include "Characters/PlayerCharacter.h"
 
 void FTUseItemTask::InitializeItemUsage(APlayerCharacter* InPlayer, int32 InItemID)
 {
 	PlayerWeak	= InPlayer;
 	ItemID		= InItemID;
+}
+
+
+void FTUseItemTask::SetCompletionCallback(TFunction<void(FTUseItemTask*)> InCallback)
+{
+	
+#ifdef UE_SERVER
+	
+	CompletionCallback = MoveTemp(InCallback);
+	
+#endif
+	
 }
 
 
@@ -24,20 +34,11 @@ void FTUseItemTask::DoThreadedWork()
 		FinishTask();
 		return;
 	}
-
-
-	UInvenComponent* InvenComponent = Player->GetInvenComponent();
-	if (!InvenComponent)
-	{
-		TESTLOG(Error, TEXT("Invalid InvenComponent in UseItemTask"));
-		FinishTask();
-		return;
-	}
 	
 
 	// 아이템 찾기
 	FItemData* FoundItem = nullptr;
-	for (FItemData& Item : InvenComponent->GetItemList())
+	for (FItemData& Item : Player->GetItemList())
 	{
 		if (Item.ItemID == ItemID)
 		{
@@ -63,12 +64,12 @@ void FTUseItemTask::DoThreadedWork()
 
 	
 	// 멀티캐스트 호출을 게임 스레드에서 실행
-	AsyncTask(ENamedThreads::GameThread, [InvenComponent, FoundItem]()
+	AsyncTask(ENamedThreads::GameThread, [Player, FoundItem]()
 	{
-		if (InvenComponent && InvenComponent->IsValidLowLevel())
+		if (Player && Player->IsValidLowLevel())
 		{
 			// 클라이언트들에게 아이템 제거 알림
-			InvenComponent->ProcessItemUsage(FoundItem->ItemID);
+			Player->TakeUseItem(FoundItem->ItemID);
 		}
 		else
 		{
@@ -83,25 +84,25 @@ void FTUseItemTask::DoThreadedWork()
 
 void FTUseItemTask::ApplyItemEffect(const FItemData& Item, APlayerCharacter* Player)
 {
-	// 아이템 타입에 따른 효과 구현
+	// Implementing effects based on item type
 	switch (Item.ItemFlags.Type)
 	{
-	case 0: // 회복 아이템
+	case 0: // Health Item
 			// Player->GetHealthComponent()->Heal(Item.ItemFlags.Level * 10.0f);
 			TESTLOG(Warning, TEXT("Applied healing effect from item %s"), *Item.ItemName);
 		break;
 		
-	case 1: // 공격력 증가 아이템
+	case 1: // Increase Attack Item
 			// Player->BoostAttack(Item.ItemFlags.Level * 5.0f, 10.0f);
 			TESTLOG(Warning, TEXT("Applied attack boost from item %s"), *Item.ItemName);
 		break;
 		
-	case 2: // 방어력 증가 아이템
+	case 2: // Increase Defense Item
 			// Player->BoostDefense(Item.ItemFlags.Level * 5.0f, 10.0f);
 			TESTLOG(Warning, TEXT("Applied defense boost from item %s"), *Item.ItemName);
 		break;
 		
-	case 3: // 속도 증가 아이템
+	case 3: // Increase Speed Item
 			// Player->BoostSpeed(Item.ItemFlags.Level * 0.1f, 8.0f);
 			TESTLOG(Warning, TEXT("Applied speed boost from item %s"), *Item.ItemName);
 		break;

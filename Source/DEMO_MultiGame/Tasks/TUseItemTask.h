@@ -10,24 +10,23 @@ class APlayerCharacter;
 class FTUseItemTask final : public FPoolableQueuedWork
 {
 public:
-	void InitializeItemUsage(APlayerCharacter* InPlayer, int32 InItemID);
+	void			InitializeItemUsage(APlayerCharacter* InPlayer, int32 InItemID);
+	void			SetCompletionCallback(TFunction<void(FTUseItemTask*)> InCallback);
 
-	void SetCompletionCallback(TFunction<void(FTUseItemTask*)> InCallback)
-	{
-#ifdef UE_SERVER
-		CompletionCallback = MoveTemp(InCallback);
-#endif
-	}
 
-	virtual void DoThreadedWork() override;
-	virtual void Abandon() override {};
-	virtual void Init() override {};
+	virtual void	DoThreadedWork	() override;
+	virtual void	Abandon			() override {};
+	virtual void	Init			() override {};
 
+	
 private:
 	void FinishTask();
 	void ApplyItemEffect(const FItemData& Item, APlayerCharacter* Player);
 
-	TWeakObjectPtr<APlayerCharacter> PlayerWeak;
-	TFunction<void(FTUseItemTask*)> CompletionCallback;
+	
+private:
+	TWeakObjectPtr<APlayerCharacter>	PlayerWeak;
+	TFunction<void(FTUseItemTask*)>		CompletionCallback;
+	
 	int32 ItemID = 0;
 };

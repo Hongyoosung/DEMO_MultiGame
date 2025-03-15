@@ -6,14 +6,21 @@
 
 FCustomQueuedThreadPool::FCustomQueuedThreadPool() : bIsDestroying(false)
 {
+	
 #ifdef UE_SERVER
+	
 	WorkAvailableEvent = FPlatformProcess::GetSynchEventFromPool();
+	
 #endif
+	
 }
+
 
 FCustomQueuedThreadPool::~FCustomQueuedThreadPool()
 {
+	
 #ifdef UE_SERVER
+	
 	if (!bIsDestroying) Destroy();
 	
 	if (WorkAvailableEvent)
@@ -21,20 +28,24 @@ FCustomQueuedThreadPool::~FCustomQueuedThreadPool()
 		FPlatformProcess::ReturnSynchEventToPool(WorkAvailableEvent);
 		WorkAvailableEvent = nullptr;
 	}
+	
 #endif
+	
 }
 
 
 bool FCustomQueuedThreadPool::Create(const uint32 InNumQueuedThreads, const uint32 StackSize, const EThreadPriority ThreadPriority,
 	const TCHAR* Name)
 {
+	
 #ifdef UE_SERVER
+	
 	FScopeLock Lock(&SynchronizationObject);
 	bool bWasSuccessful = true;
 	
-	
 	for (uint32 i = 0; i < InNumQueuedThreads; ++i)
 	{
+		
 		FCustomThread* NewThread = new FCustomThread(this);
 		if (NewThread != nullptr)
 		{
@@ -48,31 +59,35 @@ bool FCustomQueuedThreadPool::Create(const uint32 InNumQueuedThreads, const uint
 			delete NewThread;
 			bWasSuccessful = false;
 		}
+		
 	}
 	
 	return bWasSuccessful;
-#else
-	return false;
+
 #endif
+	
 }
 
 
 void FCustomQueuedThreadPool::Destroy()
 {
+	
 #ifdef UE_SERVER
+	
 	bIsDestroying = true;
 
+	// 1. Clear all pending tasks and abandon them
 	{
 		FScopeLock Lock(&SynchronizationObject);
 		FPoolableQueuedWork* Work = nullptr;
 
-		// 모든 우선순위 큐 비우기
+		// Clear all pending tasks
 		int32 HighPriorityCleared = 0;
 		while (HighPriorityWork.Dequeue(Work)) 
 		{
 			if (Work)
 			{
-				Work->Abandon();  // 작업 중단 알림
+				Work->Abandon();  // Abandon the task
 				delete Work;
 			}
 			HighPriorityCleared++;
@@ -100,7 +115,7 @@ void FCustomQueuedThreadPool::Destroy()
 			LowPriorityCleared++;
 		}
 		
-		// 로그에 남은 작업 수 기록 (디버깅 목적)
+		// Record the number of tasks left in the log (for debugging purposes)
 		if (HighPriorityCleared > 0 || NormalPriorityCleared > 0 || LowPriorityCleared > 0)
 		{
 			TESTLOG(Warning, TEXT("Cleared pending tasks: High=%d, Normal=%d, Low=%d"), 
@@ -108,14 +123,16 @@ void FCustomQueuedThreadPool::Destroy()
 		}
 	}
 
-	// 2. 모든 스레드 깨우기 (종료 플래그가 이미 설정됨)
-	WorkAvailableEvent->Trigger();
 	
-	// 3. 스레드 종료 - 각 스레드가 더 이상 작업을 받지 않도록
+	// 2. Wake all threads (exit flag already set)
+	WorkAvailableEvent->Trigger();
+
+	
+	// 3. Terminate threads so that each thread is no longer receiving work.
 	{
 		FScopeLock Lock(&SynchronizationObject);
 		
-		// 모든 스레드 종료
+		// trun off all threads
 		for (FCustomThread* Thread : Threads)
 		{
 			if (Thread)
@@ -128,26 +145,33 @@ void FCustomQueuedThreadPool::Destroy()
 		Threads.Empty();
 		NumThreads = 0;
 	}
+
 	
-	// 4. 활성 작업 카운터 초기화
+	// 4. Resetting the active task counter
 	if (ActiveTaskCounter.GetValue() > 0)
 	{
 		TESTLOG(Warning, TEXT("Destroying thread pool with %d active tasks"), ActiveTaskCounter.GetValue());
 		ActiveTaskCounter.Reset();
 	}
+	
 #endif
+	
 }
+
 
 void FCustomQueuedThreadPool::AddQueuedWork(IQueuedWork* InQueuedWork, EQueuedWorkPriority InQueuedWorkPriority)
 {
+	
 #ifdef UE_SERVER
+	
 	if (bIsDestroying)
 	{
-		// 종료 중인 경우 작업 거부 및 정리
+		// Reject and clean up tasks if they are shutting down
 		TESTLOG(Warning, TEXT("Rejecting work while thread pool is being destroyed"));
 		delete InQueuedWork;
 		return;
 	}
+
 	
 	FScopeLock Lock(&SynchronizationObject);
 
@@ -167,22 +191,29 @@ void FCustomQueuedThreadPool::AddQueuedWork(IQueuedWork* InQueuedWork, EQueuedWo
 		break;
 	}
     
-	// 작업 추가 시 대기 스레드 깨우기 (이벤트 기반)
+	// Wake up waiting threads when adding a task (event-driven)
 	WorkAvailableEvent->Trigger();
+
 #endif
+	
 }
+
 
 bool FCustomQueuedThreadPool::RetractQueuedWork(IQueuedWork* InQueuedWork)
 {
+	
 #ifdef UE_SERVER
+	
 	FScopeLock Lock(&SynchronizationObject);
-	TArray<FPoolableQueuedWork*> TempQueue;
-	FPoolableQueuedWork* Work = nullptr;
-	bool bFound = false;
+	
+	TArray<FPoolableQueuedWork*>	TempQueue;
+	FPoolableQueuedWork*			Work = nullptr;
+	bool							bFound = false;
+	
 
 	for (auto& Queue : { &HighPriorityWork, &NormalPriorityWork, &LowPriorityWork })
 	{
-		// 큐에서 작업을 찾아 제거
+		// Find and remove tasks from the queue
 		while (Queue->Dequeue(Work))
 		{
 			if (Work == InQueuedWork)
@@ -196,7 +227,7 @@ bool FCustomQueuedThreadPool::RetractQueuedWork(IQueuedWork* InQueuedWork)
 			}
 		}
 		
-		// 남은 작업 다시 큐에 넣기
+		// Requeue remaining work
 		for (FPoolableQueuedWork* RemainingWork : TempQueue)
 		{
 			Queue->Enqueue(RemainingWork);
@@ -205,19 +236,23 @@ bool FCustomQueuedThreadPool::RetractQueuedWork(IQueuedWork* InQueuedWork)
 	}
 	
 	return bFound;
-#else
-	return fasel;
+	
 #endif
+	
 }
+
 
 void FCustomQueuedThreadPool::WaitForCompletion()
 {
-#ifdef UE_SERVER
-	const float TimeoutSeconds = 3.0f; // 최대 대기 시간 설정
-	float ElapsedTime = 0.0f;
-	const float SleepInterval = 0.01f;
 	
-	// 남은 작업이 있는지 확인
+#ifdef UE_SERVER
+	
+	const float TimeoutSeconds	= 3.0f; // Setting the maximum wait time
+	float		ElapsedTime		= 0.0f;
+	const float SleepInterval	= 0.01f;
+
+	
+	// Check the remaining tasks and active tasks
 	{
 		FScopeLock Lock(&SynchronizationObject);
 		
@@ -229,20 +264,23 @@ void FCustomQueuedThreadPool::WaitForCompletion()
 				ActiveTaskCounter.GetValue());
 		}
 	}
+
 	
+	// Wait for the active task to complete or reach a timeout
 	while (ActiveTaskCounter.GetValue() > 0 && ElapsedTime < TimeoutSeconds)
 	{
 		FPlatformProcess::Sleep(SleepInterval);
 		ElapsedTime += SleepInterval;
 		
-		// 주기적으로 로그 출력 (500ms 마다)
+		// Periodic log output (every 500 ms)
 		if (FMath::FloorToInt(ElapsedTime / 0.5f) != FMath::FloorToInt((ElapsedTime - SleepInterval) / 0.5f))
 		{
 			TESTLOG(Log, TEXT("Still waiting for completion: %d active tasks, %.1f seconds elapsed"), 
 				ActiveTaskCounter.GetValue(), ElapsedTime);
 		}
 	}
-	
+
+	// Processing results after waiting is complete
 	if (ActiveTaskCounter.GetValue() > 0)
 	{
 		TESTLOG(Warning, TEXT("WaitForCompletion timed out after %.1f seconds with %d active tasks"),
@@ -253,15 +291,20 @@ void FCustomQueuedThreadPool::WaitForCompletion()
 	{
 		TESTLOG(Log, TEXT("All tasks completed successfully"));
 	}
+	
 #endif
+	
 }
+
 
 void FCustomQueuedThreadPool::ForceShutDown()
 {
+	
 #ifdef UE_SERVER
+	
 	FScopeLock Lock(&SynchronizationObject);
 	
-	// 모든 스레드 종료
+	// Terminate all threads
 	for (FCustomThread* Thread : Threads)
 	{
 		Thread->Shutdown();
@@ -271,8 +314,10 @@ void FCustomQueuedThreadPool::ForceShutDown()
 	Threads.Empty();
 	NumThreads = 0;
 
-	// 남은 태스크 강제 종료 및 삭제
+	
+	// Force terminate and delete leftover tasks
 	FPoolableQueuedWork* Work;
+	
 	while (HighPriorityWork.Dequeue(Work))
 	{
 		if (Work)
@@ -297,13 +342,19 @@ void FCustomQueuedThreadPool::ForceShutDown()
 			delete Work;
 		}
 	}
+	
 	ActiveTaskCounter.Reset(); // 활성 태스크 카운터 초기화
+	
 #endif
+	
 }
+
 
 bool FCustomQueuedThreadPool::AddThread(uint32 StackSize, EThreadPriority ThreadPriority, const TCHAR* Name)
 {
+	
 #ifdef UE_SERVER
+	
 	FScopeLock Lock(&SynchronizationObject);
 	
 	FCustomThread* NewThread = new FCustomThread(this);
@@ -315,29 +366,36 @@ bool FCustomQueuedThreadPool::AddThread(uint32 StackSize, EThreadPriority Thread
 	NumThreads++;
 	
 	return true;
-#else
-	return false;
+	
 #endif
+	
 }
+
 
 bool FCustomQueuedThreadPool::RemoveThread()
 {
+	
 #ifdef UE_SERVER
+	
 	FScopeLock Lock(&SynchronizationObject);
+	
 	if (NumThreads <= 1)
-		return false;  // 최소 하나의 스레드는 유지
+		return false;  // Keep at least one thread
 
+	
 	const int32 LastIndex = Threads.Num() - 1;
 	FCustomThread* Thread = Threads[LastIndex];
+
 	
 	Thread->Shutdown();
 	delete Thread;
+
 	
 	Threads.RemoveAt(LastIndex);
 	NumThreads--;
 	
 	return true;
-#else
-	return false;
+
 #endif
+	
 }
