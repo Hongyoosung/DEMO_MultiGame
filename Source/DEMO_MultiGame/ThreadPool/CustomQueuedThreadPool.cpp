@@ -57,6 +57,7 @@ bool FCustomQueuedThreadPool::Create(const uint32 InNumQueuedThreads, const uint
 		else
 		{
 			delete NewThread;
+			NewThread = nullptr;
 			bWasSuccessful = false;
 		}
 		
@@ -89,6 +90,7 @@ void FCustomQueuedThreadPool::Destroy()
 			{
 				Work->Abandon();  // Abandon the task
 				delete Work;
+				Work = nullptr;
 			}
 			HighPriorityCleared++;
 		}
@@ -100,6 +102,7 @@ void FCustomQueuedThreadPool::Destroy()
 			{
 				Work->Abandon();
 				delete Work;
+				Work = nullptr;
 			}
 			NormalPriorityCleared++;
 		}
@@ -111,6 +114,7 @@ void FCustomQueuedThreadPool::Destroy()
 			{
 				Work->Abandon();
 				delete Work;
+				Work = nullptr;
 			}
 			LowPriorityCleared++;
 		}
@@ -139,6 +143,7 @@ void FCustomQueuedThreadPool::Destroy()
 			{
 				Thread->Shutdown();
 				delete Thread;
+				Thread = nullptr;
 			}
 		}
 		
@@ -169,6 +174,7 @@ void FCustomQueuedThreadPool::AddQueuedWork(IQueuedWork* InQueuedWork, EQueuedWo
 		// Reject and clean up tasks if they are shutting down
 		TESTLOG(Warning, TEXT("Rejecting work while thread pool is being destroyed"));
 		delete InQueuedWork;
+		InQueuedWork = nullptr;
 		return;
 	}
 
@@ -220,6 +226,7 @@ bool FCustomQueuedThreadPool::RetractQueuedWork(IQueuedWork* InQueuedWork)
 			{
 				bFound = true;
 				delete Work;
+				Work = nullptr;
 			}
 			else
 			{
@@ -309,6 +316,7 @@ void FCustomQueuedThreadPool::ForceShutDown()
 	{
 		Thread->Shutdown();
 		delete Thread;
+		Thread = nullptr;
 	}
 	
 	Threads.Empty();
@@ -324,6 +332,7 @@ void FCustomQueuedThreadPool::ForceShutDown()
 		{
 			Work->Abandon();
 			delete Work;
+			Work = nullptr;
 		}
 	}
 	while (NormalPriorityWork.Dequeue(Work))
@@ -332,6 +341,7 @@ void FCustomQueuedThreadPool::ForceShutDown()
 		{
 			Work->Abandon();
 			delete Work;
+			Work = nullptr;
 		}
 	}
 	while (LowPriorityWork.Dequeue(Work))
@@ -340,6 +350,7 @@ void FCustomQueuedThreadPool::ForceShutDown()
 		{
 			Work->Abandon();
 			delete Work;
+			Work = nullptr;
 		}
 	}
 	
@@ -389,6 +400,7 @@ bool FCustomQueuedThreadPool::RemoveThread()
 	
 	Thread->Shutdown();
 	delete Thread;
+	Thread = nullptr;
 
 	
 	Threads.RemoveAt(LastIndex);

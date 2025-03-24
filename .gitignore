@@ -25,15 +25,6 @@
 *.lib
 *.sbr
 
-# 언리얼 엔진 특정 파일
-*.uasset
-*.umap
-/Content/StarterContent/
-/Content/Characters/
-/Content/FirstPerson/
-/Content/ThirdPerson/
-/Content/TopDown/
-
 # Visual Studio 파일
 .vs/
 *.sln

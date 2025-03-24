@@ -17,7 +17,12 @@ struct FPlayerChecksum
 	GENERATED_BODY()
 	
 public:
-	FPlayerChecksum() : HealthChecksum(0), PositionChecksum(0), LastChecksumPosition(FVector3d(0, 0, 0)) {}
+	FPlayerChecksum()
+		: HealthChecksum(0)
+		, PositionChecksum(0)
+		, LastChecksumPosition(FVector3d(0, 0, 0))
+		, Padding(0) // 패딩 초기화
+	{}
 
 	// Getters
 	FORCEINLINE uint32		GetHealthChecksum		()	const					{		return HealthChecksum;			}
@@ -39,6 +44,9 @@ private:
 
 	UPROPERTY()
 	FVector		LastChecksumPosition;
+	
+	UPROPERTY()
+	uint32      Padding;                // 4바이트 (8바이트 정렬 맞추기용)
 };
 
 

@@ -65,11 +65,11 @@ void AMultiGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
     // Clean up task pools
     FTAttackTask* AttackTask;
-    while (AttackTaskPool.Dequeue(AttackTask)) { delete AttackTask; }
+    while (AttackTaskPool.Dequeue(AttackTask)) { delete AttackTask;  AttackTask = nullptr; }
     FTAcquireItemTask* AcquireTask;
-    while (AcquireItemTaskPool.Dequeue(AcquireTask)) { delete AcquireTask; }
+    while (AcquireItemTaskPool.Dequeue(AcquireTask)) { delete AcquireTask;  AcquireTask = nullptr; }
     FTUseItemTask* UseTask;
-    while (UseItemTaskPool.Dequeue(UseTask)) { delete UseTask; }
+    while (UseItemTaskPool.Dequeue(UseTask)) { delete UseTask;  UseTask = nullptr; }
     
 #endif
 
