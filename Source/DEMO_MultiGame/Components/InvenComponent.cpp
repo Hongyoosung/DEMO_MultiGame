@@ -149,7 +149,7 @@ void UInvenComponent::Multicast_UseItemEffect_Implementation(const FVector Locat
 	}
 
 	UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), UseItemEffect, Location);
-	TESTLOG(Error, TEXT("UseItemEffect: %p"), UseItemEffect);
+	TESTLOG(Warning, TEXT("UseItemEffect: %p"), UseItemEffect);
 	//#endif
 }
 
